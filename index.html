@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#f2f2f7" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="description" content="HomeHero — a simple, friendly daily task app for house helpers" />
+  <title>HomeHero · Today's Tasks</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <!-- Frosted top bar -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">🏠 <span>HomeHero</span></div>
+      <div class="topbar-actions">
+        <button id="btn-bell" class="icon-btn" aria-label="Reminders">🔔</button>
+        <button id="btn-history" class="icon-btn" aria-label="History">📅</button>
+        <button id="btn-settings" class="icon-btn" aria-label="Settings">⚙️</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="page">
+
+    <!-- Greeting -->
+    <section class="greeting">
+      <h1 id="greeting-text">Good morning!</h1>
+      <p id="date-text" class="date-text"></p>
+    </section>
+
+    <!-- Progress hero card -->
+    <section class="hero-card" id="hero-card">
+      <div class="ring-wrap">
+        <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+          <circle class="ring-track" cx="60" cy="60" r="52"></circle>
+          <circle class="ring-fill" id="ring-fill" cx="60" cy="60" r="52"></circle>
+        </svg>
+        <div class="ring-center">
+          <div class="ring-count" id="ring-count">0/0</div>
+          <div class="ring-label">done</div>
+        </div>
+      </div>
+      <div class="hero-stats">
+        <div class="stat">
+          <div class="stat-value" id="stat-stars">⭐ 0</div>
+          <div class="stat-label">Stars today</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="stat-streak">🔥 0</div>
+          <div class="stat-label">Day streak</div>
+        </div>
+        <div class="hero-message" id="hero-message">Let's start! You can do it! 💪</div>
+      </div>
+    </section>
+
+    <!-- Timeline -->
+    <section class="timeline" id="timeline">
+      <!-- Period sections rendered by JS -->
+    </section>
+
+    <p class="footer-note">Tap ✓ when finished. Tap “Cannot” if there is a problem.</p>
+  </main>
+
+  <!-- "Cannot do" bottom sheet -->
+  <div class="sheet-backdrop" id="sheet-backdrop" hidden></div>
+  <div class="sheet" id="remark-sheet" role="dialog" aria-modal="true" hidden>
+    <div class="sheet-handle"></div>
+    <h2 class="sheet-title" id="sheet-task-title">Why cannot do?</h2>
+    <p class="sheet-sub">Choose one reason 👇</p>
+    <div class="reason-grid" id="reason-grid">
+      <button class="reason-btn" data-reason="No supplies">🧴<span>No supplies</span></button>
+      <button class="reason-btn" data-reason="No time">⏰<span>No time</span></button>
+      <button class="reason-btn" data-reason="Not feeling well">🤒<span>Not well</span></button>
+      <button class="reason-btn" data-reason="Something broken">🔧<span>Broken</span></button>
+    </div>
+    <label class="remark-label" for="remark-input">Want to say more? (optional)</label>
+    <textarea id="remark-input" class="remark-input" rows="2" placeholder="Type here…"></textarea>
+    <div class="sheet-actions">
+      <button class="btn btn-gray" id="sheet-cancel">Back</button>
+      <button class="btn btn-orange" id="sheet-save" disabled>Send ✉️</button>
+    </div>
+  </div>
+
+  <!-- Celebration overlay -->
+  <div class="celebrate" id="celebrate" hidden>
+    <div class="celebrate-card">
+      <div class="celebrate-emoji">🎉</div>
+      <h2 id="celebrate-title">All tasks done!</h2>
+      <p id="celebrate-sub">Amazing work today! 🌟</p>
+      <div class="celebrate-stars" id="celebrate-stars"></div>
+      <button class="btn btn-blue" id="celebrate-close">Yay! 🙌</button>
+    </div>
+  </div>
+
+  <!-- History modal -->
+  <div class="modal" id="history-modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>📅 Last 7 days</h2>
+        <button class="icon-btn modal-close" data-close="history-modal" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body" id="history-body"></div>
+    </div>
+  </div>
+
+  <!-- Settings modal (for employer) -->
+  <div class="modal" id="settings-modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>⚙️ Manage tasks</h2>
+        <button class="icon-btn modal-close" data-close="settings-modal" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="settings-hint">For the employer: add or remove daily tasks. Changes apply immediately.</p>
+        <div id="settings-task-list" class="settings-task-list"></div>
+        <h3 class="settings-sub">Add a new task</h3>
+        <div class="add-form">
+          <div class="emoji-picker" id="emoji-picker"></div>
+          <input type="text" id="new-task-title" class="text-input" maxlength="40" placeholder="Task name, e.g. Water plants" />
+          <div class="period-picker" id="period-picker"></div>
+          <button class="btn btn-blue" id="btn-add-task">＋ Add task</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confetti canvas -->
+  <canvas id="confetti-canvas" aria-hidden="true"></canvas>
+
+  <!-- Toast -->
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
