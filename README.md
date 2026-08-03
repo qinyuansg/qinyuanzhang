@@ -56,17 +56,24 @@ Households coordinate daily chores with helpers through memory, paper lists, or 
 
 ---
 
-## Run it
+## Run & share it
+
+**Easiest — share one file (works 100% offline):**
+Send **`HomeHero.html`** to anyone over WhatsApp, email, or USB. They open it in any browser — no internet, no install, no other files needed. Progress saves on their own device. Rebuild it after changing the app:
 
 ```bash
-# Option 1: just open the file
-open index.html
+python3 tools/build_single_file.py
+```
 
-# Option 2: serve locally
+**Hosted — GitHub Pages (offline after first visit):**
+Enable Pages on this repo (Settings → Pages → deploy from branch), open the URL on the helper's phone, and "Add to Home Screen". A service worker (`sw.js`) caches the app, so it launches and works fully offline from then on.
+
+**Local dev:**
+```bash
 python3 -m http.server 8000   # then visit http://localhost:8000
 ```
 
-Or enable **GitHub Pages** on this repo (Settings → Pages → deploy from branch) and open the URL on the helper's phone → "Add to Home Screen".
+> Note: each device keeps its own data (tasks, progress, remarks) in `localStorage` — sharing the file shares the app, not the data. Cross-device sync is on the roadmap.
 
 ## Tech notes
 

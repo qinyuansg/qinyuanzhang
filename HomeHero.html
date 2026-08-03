@@ -1,0 +1,1584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#f2f2f7" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="description" content="HomeHero — a simple, friendly daily task app for house helpers" />
+  <title>HomeHero · Today's Tasks</title>
+  <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIkhvbWVIZXJvIOKAlCBEYWlseSBUYXNrcyIsCiAgInNob3J0X25hbWUiOiAiSG9tZUhlcm8iLAogICJkZXNjcmlwdGlvbiI6ICJBIHNpbXBsZSwgZnJpZW5kbHkgZGFpbHkgdGFzayBhcHAgZm9yIGhvdXNlIGhlbHBlcnMiLAogICJzdGFydF91cmwiOiAiLiIsCiAgImRpc3BsYXkiOiAic3RhbmRhbG9uZSIsCiAgImJhY2tncm91bmRfY29sb3IiOiAiI2YyZjJmNyIsCiAgInRoZW1lX2NvbG9yIjogIiNmMmYyZjciLAogICJpY29ucyI6IFsKICAgIHsKICAgICAgInNyYyI6ICJkYXRhOmltYWdlL3N2Zyt4bWwsJTNDc3ZnIHhtbG5zPSdodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2Zycgdmlld0JveD0nMCAwIDEwMCAxMDAnJTNFJTNDcmVjdCB3aWR0aD0nMTAwJyBoZWlnaHQ9JzEwMCcgcng9JzIyJyBmaWxsPSclMjMwMDdhZmYnLyUzRSUzQ3RleHQgeD0nNTAnIHk9JzY4JyBmb250LXNpemU9JzUyJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJyUzRSVGMCU5RiU4RiVBMCUzQy90ZXh0JTNFJTNDL3N2ZyUzRSIsCiAgICAgICJzaXplcyI6ICJhbnkiLAogICAgICAidHlwZSI6ICJpbWFnZS9zdmcreG1sIiwKICAgICAgInB1cnBvc2UiOiAiYW55IgogICAgfQogIF0KfQo=" />
+  <style>
+/* ==========================================================================
+   HomeHero — Apple-inspired design system
+   iOS system palette, SF font stack, soft cards, springy feedback
+   ========================================================================== */
+
+:root {
+  --bg: #f2f2f7;
+  --card: #ffffff;
+  --text: #1c1c1e;
+  --text-2: #6e6e73;
+  --text-3: #aeaeb2;
+  --blue: #007aff;
+  --green: #34c759;
+  --orange: #ff9f0a;
+  --red: #ff3b30;
+  --purple: #af52de;
+  --separator: rgba(60, 60, 67, 0.12);
+  --radius-lg: 22px;
+  --radius-md: 16px;
+  --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.06), 0 8px 32px rgba(0, 0, 0, 0.04);
+  --shadow-float: 0 12px 40px rgba(0, 0, 0, 0.18);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+[hidden] { display: none !important; }
+
+html, body { margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  padding-bottom: 48px;
+}
+
+button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+
+/* ---------- Top bar ---------- */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: rgba(242, 242, 247, 0.78);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 0.5px solid var(--separator);
+}
+
+.topbar-inner {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.brand { font-weight: 700; font-size: 19px; letter-spacing: -0.3px; }
+
+.topbar-actions { display: flex; gap: 6px; }
+
+.icon-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  transition: transform 0.18s var(--spring), background 0.18s ease;
+}
+
+.icon-btn:active { transform: scale(0.85); background: rgba(0, 0, 0, 0.07); }
+
+/* ---------- Page layout ---------- */
+
+.page { max-width: 560px; margin: 0 auto; padding: 20px 20px 0; }
+
+.greeting h1 {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.6px;
+  margin: 8px 0 2px;
+}
+
+.date-text { color: var(--text-2); margin: 0 0 18px; font-size: 16px; }
+
+/* ---------- Hero / progress card ---------- */
+
+.hero-card {
+  background: var(--card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 28px;
+  transition: box-shadow 0.4s ease;
+}
+
+.hero-card.all-done {
+  background: linear-gradient(135deg, #e8fbe9, #ffffff 70%);
+}
+
+.ring-wrap { position: relative; width: 108px; height: 108px; flex-shrink: 0; }
+
+.ring { width: 108px; height: 108px; transform: rotate(-90deg); }
+
+.ring-track, .ring-fill {
+  fill: none;
+  stroke-width: 11;
+  stroke-linecap: round;
+}
+
+.ring-track { stroke: #e9e9ee; }
+
+.ring-fill {
+  stroke: var(--green);
+  stroke-dasharray: 326.7;   /* 2πr, r=52 */
+  stroke-dashoffset: 326.7;
+  transition: stroke-dashoffset 0.8s var(--spring);
+}
+
+.ring-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+}
+
+.ring-count { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; }
+.ring-label { font-size: 13px; color: var(--text-2); }
+
+.hero-stats { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
+
+.stat-value { font-size: 22px; font-weight: 800; }
+.stat-label { font-size: 13px; color: var(--text-2); }
+
+.hero-message {
+  flex-basis: 100%;
+  font-size: 15px;
+  color: var(--text-2);
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 8px 12px;
+}
+
+/* ---------- Timeline ---------- */
+
+.timeline { position: relative; padding-left: 34px; }
+
+.timeline::before {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 2px;
+  background: linear-gradient(#ffd60a, #ff9f0a, #007aff, #5e5ce6);
+  opacity: 0.35;
+}
+
+.period { margin-bottom: 26px; }
+
+.period-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.period-dot {
+  position: absolute;
+  left: -34px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+}
+
+.period-title { font-size: 21px; font-weight: 800; letter-spacing: -0.4px; }
+
+.now-badge {
+  background: var(--blue);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.08); opacity: 0.85; }
+}
+
+.period.now .task-card { box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.25), var(--shadow-card); }
+
+.period-empty {
+  color: var(--text-3);
+  font-size: 15px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+
+/* ---------- Task cards ---------- */
+
+.task-card {
+  background: var(--card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  transition: transform 0.25s var(--spring), background 0.35s ease, opacity 0.35s ease;
+  animation: card-in 0.4s var(--spring) backwards;
+}
+
+.task-main {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 12px;
+}
+
+@keyframes card-in {
+  from { transform: translateY(14px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.task-card:active { transform: scale(0.985); }
+
+.task-emoji {
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.task-info { flex: 1; min-width: 0; }
+
+.task-title { font-size: 17px; font-weight: 700; letter-spacing: -0.2px; }
+
+.task-status { font-size: 14px; color: var(--text-2); margin-top: 2px; }
+
+.task-actions { display: flex; gap: 10px; }
+
+/* Big tick button — the main action */
+.tick-btn {
+  flex: 1.4;
+  height: 56px;
+  border-radius: 18px;
+  background: var(--bg);
+  border: 2.5px solid #d8d8de;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text-2);
+  transition: transform 0.22s var(--spring), background 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+}
+
+.tick-btn svg { width: 26px; height: 26px; flex-shrink: 0; }
+
+.tick-btn .tick-path {
+  fill: none;
+  stroke: #c7c7cc;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 30;
+  stroke-dashoffset: 0;
+  transition: stroke 0.2s ease;
+}
+
+.tick-btn:active { transform: scale(0.94); }
+
+.cannot-btn {
+  flex: 1;
+  height: 56px;
+  border-radius: 18px;
+  background: #fff4e5;
+  color: #c25f00;
+  font-size: 15px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  transition: transform 0.22s var(--spring);
+}
+
+.cannot-btn:active { transform: scale(0.9); }
+
+/* Done state */
+.task-card.done { background: #eafbef; }
+.task-card.done .task-title { color: #1d7a3a; }
+.task-card.done .tick-btn {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+  animation: tick-pop 0.45s var(--spring);
+}
+.task-card.done .tick-path {
+  stroke: #fff;
+  animation: tick-draw 0.4s ease 0.05s backwards;
+}
+.task-card.done .cannot-btn { display: none; }
+
+@keyframes tick-pop {
+  0% { transform: scale(0.9); }
+  60% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+@keyframes tick-draw {
+  from { stroke-dashoffset: 30; }
+  to { stroke-dashoffset: 0; }
+}
+
+/* Skipped state */
+.task-card.skipped { background: #fff7ec; }
+.task-card.skipped .tick-btn { border-color: #f0c48a; }
+.task-card.skipped .cannot-btn { background: var(--orange); color: #fff; }
+
+.reason-chip {
+  display: inline-block;
+  background: #ffe8c7;
+  color: #a35400;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 2px 10px;
+  margin-top: 4px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Floating star reward */
+.star-float {
+  position: fixed;
+  z-index: 90;
+  font-size: 26px;
+  pointer-events: none;
+  animation: star-fly 1s ease-out forwards;
+}
+
+@keyframes star-fly {
+  0% { transform: translateY(0) scale(0.6); opacity: 0; }
+  20% { opacity: 1; transform: translateY(-14px) scale(1.2); }
+  100% { transform: translateY(-70px) scale(1); opacity: 0; }
+}
+
+.footer-note {
+  text-align: center;
+  color: var(--text-3);
+  font-size: 14px;
+  margin: 8px 0 32px;
+}
+
+/* ---------- Bottom sheet ---------- */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 60;
+  animation: fade-in 0.25s ease;
+}
+
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 70;
+  background: var(--card);
+  border-radius: 24px 24px 0 0;
+  box-shadow: var(--shadow-float);
+  padding: 10px 20px calc(20px + env(safe-area-inset-bottom));
+  max-width: 560px;
+  margin: 0 auto;
+  animation: sheet-up 0.35s var(--spring);
+}
+
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+.sheet-handle {
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  background: #d8d8de;
+  margin: 4px auto 14px;
+}
+
+.sheet-title { font-size: 21px; font-weight: 800; margin: 0 0 2px; }
+.sheet-sub { color: var(--text-2); margin: 0 0 14px; font-size: 15px; }
+
+.reason-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.reason-btn {
+  background: var(--bg);
+  border: 2.5px solid transparent;
+  border-radius: var(--radius-md);
+  padding: 14px 10px;
+  font-size: 30px;
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  transition: transform 0.2s var(--spring), border-color 0.2s ease, background 0.2s ease;
+}
+
+.reason-btn span { font-size: 15px; font-weight: 700; color: var(--text); }
+
+.reason-btn:active { transform: scale(0.93); }
+
+.reason-btn.selected {
+  border-color: var(--orange);
+  background: #fff4e5;
+}
+
+.remark-label { font-size: 14px; color: var(--text-2); display: block; margin-bottom: 6px; }
+
+.remark-input {
+  width: 100%;
+  border: 1.5px solid var(--separator);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  font-family: inherit;
+  font-size: 16px;
+  padding: 12px;
+  resize: none;
+  outline: none;
+}
+
+.remark-input:focus { border-color: var(--blue); }
+
+.sheet-actions { display: flex; gap: 10px; margin-top: 14px; }
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  flex: 1;
+  height: 52px;
+  border-radius: var(--radius-md);
+  font-size: 17px;
+  font-weight: 700;
+  transition: transform 0.2s var(--spring), opacity 0.2s ease;
+}
+
+.btn:active { transform: scale(0.95); }
+.btn:disabled { opacity: 0.4; }
+
+.btn-blue { background: var(--blue); color: #fff; }
+.btn-orange { background: var(--orange); color: #fff; }
+.btn-gray { background: #e9e9ee; color: var(--text); }
+
+/* ---------- Celebration ---------- */
+
+.celebrate {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(0, 0, 0, 0.4);
+  display: grid;
+  place-items: center;
+  animation: fade-in 0.3s ease;
+  padding: 24px;
+}
+
+.celebrate-card {
+  background: var(--card);
+  border-radius: 28px;
+  padding: 32px 28px;
+  text-align: center;
+  max-width: 340px;
+  width: 100%;
+  box-shadow: var(--shadow-float);
+  animation: celebrate-pop 0.5s var(--spring);
+}
+
+@keyframes celebrate-pop {
+  from { transform: scale(0.7); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.celebrate-emoji { font-size: 64px; animation: bounce 1s ease infinite; }
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+
+.celebrate-card h2 { font-size: 26px; margin: 10px 0 4px; letter-spacing: -0.4px; }
+.celebrate-card p { color: var(--text-2); margin: 0 0 12px; }
+
+.celebrate-stars { font-size: 30px; letter-spacing: 4px; margin-bottom: 20px; min-height: 38px; }
+
+/* ---------- Modals ---------- */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.35);
+  display: grid;
+  place-items: end center;
+  animation: fade-in 0.25s ease;
+}
+
+.modal-card {
+  background: var(--bg);
+  border-radius: 24px 24px 0 0;
+  width: 100%;
+  max-width: 560px;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  animation: sheet-up 0.35s var(--spring);
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 10px;
+}
+
+.modal-head h2 { margin: 0; font-size: 22px; letter-spacing: -0.4px; }
+
+.modal-close { background: #e3e3e8; width: 34px; height: 34px; font-size: 15px; }
+
+.modal-body { overflow-y: auto; padding: 4px 20px calc(28px + env(safe-area-inset-bottom)); }
+
+/* ---------- History ---------- */
+
+.history-day {
+  background: var(--card);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+
+.history-day-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 700;
+}
+
+.history-score { font-size: 15px; }
+.history-score.good { color: var(--green); }
+.history-score.partial { color: var(--orange); }
+.history-score.none { color: var(--text-3); }
+
+.history-bar {
+  height: 8px;
+  background: #e9e9ee;
+  border-radius: 4px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.history-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--green);
+  transition: width 0.5s ease;
+}
+
+.history-remarks { margin-top: 8px; font-size: 14px; color: var(--text-2); }
+.history-remarks li { margin-bottom: 2px; }
+
+/* ---------- Settings ---------- */
+
+.settings-hint { color: var(--text-2); font-size: 14px; margin: 4px 0 12px; }
+
+.settings-task-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+
+.settings-row {
+  background: var(--card);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-row .s-emoji { font-size: 24px; }
+.settings-row .s-title { flex: 1; font-weight: 600; font-size: 15px; }
+.settings-row .s-period {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  background: var(--bg);
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.s-delete {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #ffe5e3;
+  color: var(--red);
+  font-size: 15px;
+  display: grid;
+  place-items: center;
+}
+
+.settings-sub { font-size: 17px; margin: 0 0 10px; }
+
+.add-form {
+  background: var(--card);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.emoji-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.emoji-option {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--bg);
+  font-size: 24px;
+  display: grid;
+  place-items: center;
+  border: 2.5px solid transparent;
+  transition: transform 0.2s var(--spring), border-color 0.2s ease;
+}
+
+.emoji-option:active { transform: scale(0.88); }
+.emoji-option.selected { border-color: var(--blue); background: #eaf3ff; }
+
+.text-input {
+  border: 1.5px solid var(--separator);
+  border-radius: 12px;
+  background: var(--bg);
+  font-family: inherit;
+  font-size: 16px;
+  padding: 12px;
+  outline: none;
+}
+
+.text-input:focus { border-color: var(--blue); }
+
+.period-picker { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+
+.period-option {
+  border-radius: 12px;
+  background: var(--bg);
+  border: 2.5px solid transparent;
+  padding: 8px 4px;
+  font-size: 13px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  gap: 2px;
+}
+
+.period-option .p-emoji { font-size: 20px; }
+.period-option.selected { border-color: var(--blue); background: #eaf3ff; }
+
+/* ---------- Confetti & toast ---------- */
+
+#confetti-canvas {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(28, 28, 30, 0.92);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 12px 20px;
+  border-radius: 999px;
+  z-index: 110;
+  box-shadow: var(--shadow-float);
+  animation: toast-in 0.35s var(--spring);
+  max-width: 86vw;
+  text-align: center;
+}
+
+@keyframes toast-in {
+  from { transform: translate(-50%, 20px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+/* ---------- Small screens ---------- */
+
+@media (max-width: 380px) {
+  .hero-card { flex-direction: column; text-align: center; }
+  .hero-stats { justify-content: center; }
+}
+
+/* ---------- Reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+</style>
+</head>
+<body>
+
+  <!-- Frosted top bar -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">🏠 <span>HomeHero</span></div>
+      <div class="topbar-actions">
+        <button id="btn-bell" class="icon-btn" aria-label="Reminders">🔔</button>
+        <button id="btn-history" class="icon-btn" aria-label="History">📅</button>
+        <button id="btn-settings" class="icon-btn" aria-label="Settings">⚙️</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="page">
+
+    <!-- Greeting -->
+    <section class="greeting">
+      <h1 id="greeting-text">Good morning!</h1>
+      <p id="date-text" class="date-text"></p>
+    </section>
+
+    <!-- Progress hero card -->
+    <section class="hero-card" id="hero-card">
+      <div class="ring-wrap">
+        <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+          <circle class="ring-track" cx="60" cy="60" r="52"></circle>
+          <circle class="ring-fill" id="ring-fill" cx="60" cy="60" r="52"></circle>
+        </svg>
+        <div class="ring-center">
+          <div class="ring-count" id="ring-count">0/0</div>
+          <div class="ring-label">done</div>
+        </div>
+      </div>
+      <div class="hero-stats">
+        <div class="stat">
+          <div class="stat-value" id="stat-stars">⭐ 0</div>
+          <div class="stat-label">Stars today</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="stat-streak">🔥 0</div>
+          <div class="stat-label">Day streak</div>
+        </div>
+        <div class="hero-message" id="hero-message">Let's start! You can do it! 💪</div>
+      </div>
+    </section>
+
+    <!-- Timeline -->
+    <section class="timeline" id="timeline">
+      <!-- Period sections rendered by JS -->
+    </section>
+
+    <p class="footer-note">Tap ✓ when finished. Tap “Cannot” if there is a problem.</p>
+  </main>
+
+  <!-- "Cannot do" bottom sheet -->
+  <div class="sheet-backdrop" id="sheet-backdrop" hidden></div>
+  <div class="sheet" id="remark-sheet" role="dialog" aria-modal="true" hidden>
+    <div class="sheet-handle"></div>
+    <h2 class="sheet-title" id="sheet-task-title">Why cannot do?</h2>
+    <p class="sheet-sub">Choose one reason 👇</p>
+    <div class="reason-grid" id="reason-grid">
+      <button class="reason-btn" data-reason="No supplies">🧴<span>No supplies</span></button>
+      <button class="reason-btn" data-reason="No time">⏰<span>No time</span></button>
+      <button class="reason-btn" data-reason="Not feeling well">🤒<span>Not well</span></button>
+      <button class="reason-btn" data-reason="Something broken">🔧<span>Broken</span></button>
+    </div>
+    <label class="remark-label" for="remark-input">Want to say more? (optional)</label>
+    <textarea id="remark-input" class="remark-input" rows="2" placeholder="Type here…"></textarea>
+    <div class="sheet-actions">
+      <button class="btn btn-gray" id="sheet-cancel">Back</button>
+      <button class="btn btn-orange" id="sheet-save" disabled>Send ✉️</button>
+    </div>
+  </div>
+
+  <!-- Celebration overlay -->
+  <div class="celebrate" id="celebrate" hidden>
+    <div class="celebrate-card">
+      <div class="celebrate-emoji">🎉</div>
+      <h2 id="celebrate-title">All tasks done!</h2>
+      <p id="celebrate-sub">Amazing work today! 🌟</p>
+      <div class="celebrate-stars" id="celebrate-stars"></div>
+      <button class="btn btn-blue" id="celebrate-close">Yay! 🙌</button>
+    </div>
+  </div>
+
+  <!-- History modal -->
+  <div class="modal" id="history-modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>📅 Last 7 days</h2>
+        <button class="icon-btn modal-close" data-close="history-modal" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body" id="history-body"></div>
+    </div>
+  </div>
+
+  <!-- Settings modal (for employer) -->
+  <div class="modal" id="settings-modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>⚙️ Manage tasks</h2>
+        <button class="icon-btn modal-close" data-close="settings-modal" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="settings-hint">For the employer: add or remove daily tasks. Changes apply immediately.</p>
+        <div id="settings-task-list" class="settings-task-list"></div>
+        <h3 class="settings-sub">Add a new task</h3>
+        <div class="add-form">
+          <div class="emoji-picker" id="emoji-picker"></div>
+          <input type="text" id="new-task-title" class="text-input" maxlength="40" placeholder="Task name, e.g. Water plants" />
+          <div class="period-picker" id="period-picker"></div>
+          <button class="btn btn-blue" id="btn-add-task">＋ Add task</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confetti canvas -->
+  <canvas id="confetti-canvas" aria-hidden="true"></canvas>
+
+  <!-- Toast -->
+  <div class="toast" id="toast" hidden></div>
+
+  <script>
+/* ==========================================================================
+   HomeHero — daily task app for house helpers
+   Vanilla JS, localStorage persistence, no backend required.
+   ========================================================================== */
+
+(function () {
+  "use strict";
+
+  /* ---------------- Constants ---------------- */
+
+  var PERIODS = [
+    { id: "morning",   label: "Morning",   emoji: "🌅", startHour: 6,  endHour: 11, reminderMin: 7 * 60 },
+    { id: "noon",      label: "Noon",      emoji: "☀️", startHour: 11, endHour: 14, reminderMin: 11 * 60 + 30 },
+    { id: "afternoon", label: "Afternoon", emoji: "🌤️", startHour: 14, endHour: 18, reminderMin: 14 * 60 + 30 },
+    { id: "night",     label: "Night",     emoji: "🌙", startHour: 18, endHour: 24, reminderMin: 18 * 60 + 30 }
+  ];
+
+  var DEFAULT_TASKS = [
+    { id: "t1", emoji: "🛏️", title: "Make the beds",        period: "morning" },
+    { id: "t2", emoji: "👕", title: "Wash clothes",          period: "morning" },
+    { id: "t3", emoji: "🍳", title: "Prepare breakfast",     period: "morning" },
+    { id: "t4", emoji: "🍽️", title: "Wash the dishes",      period: "noon" },
+    { id: "t5", emoji: "🧹", title: "Sweep the floor",       period: "noon" },
+    { id: "t6", emoji: "🧽", title: "Mop the floor",         period: "afternoon" },
+    { id: "t7", emoji: "🚽", title: "Clean the toilet",      period: "afternoon" },
+    { id: "t8", emoji: "👔", title: "Iron & fold clothes",   period: "afternoon" },
+    { id: "t9", emoji: "🍲", title: "Prepare dinner",        period: "night" },
+    { id: "t10", emoji: "🗑️", title: "Throw the rubbish",   period: "night" }
+  ];
+
+  var EMOJI_CHOICES = ["🧺", "👕", "🧹", "🧽", "🚽", "🍳", "🍲", "🍽️", "🛏️", "🪟", "🌱", "🐕", "🛒", "🗑️", "👔", "🧸", "🚗", "🐟"];
+
+  var ENCOURAGEMENTS = [
+    "Let's start! You can do it! 💪",
+    "Good job! Keep going! 👍",
+    "Wow, so fast! ⚡",
+    "Almost there! 🌟",
+    "You are a star! ⭐"
+  ];
+
+  var STORE = {
+    tasks: "hh_tasks_v1",
+    log: "hh_log_v1",
+    streak: "hh_streak_v1",
+    notify: "hh_notify_v1"
+  };
+
+  /* ---------------- State ---------------- */
+
+  var tasks = load(STORE.tasks, DEFAULT_TASKS);
+  var log = load(STORE.log, {});          // { "2026-08-03": { taskId: {status, reason, remark, at} } }
+  var streakInfo = load(STORE.streak, { count: 0, lastDate: null });
+  var remindersOn = load(STORE.notify, false);
+
+  var sheetTaskId = null;
+  var sheetReason = null;
+  var celebrated = false;
+  var addEmoji = EMOJI_CHOICES[0];
+  var addPeriod = "morning";
+
+  /* ---------------- Storage helpers ---------------- */
+
+  function load(key, fallback) {
+    try {
+      var raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  function save(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* storage full/blocked */ }
+  }
+
+  function todayKey(offsetDays) {
+    var d = new Date();
+    if (offsetDays) d.setDate(d.getDate() + offsetDays);
+    var m = String(d.getMonth() + 1).padStart(2, "0");
+    var day = String(d.getDate()).padStart(2, "0");
+    return d.getFullYear() + "-" + m + "-" + day;
+  }
+
+  function todayLog() {
+    var key = todayKey();
+    if (!log[key]) log[key] = {};
+    return log[key];
+  }
+
+  function entryFor(taskId) {
+    return todayLog()[taskId] || null;
+  }
+
+  /* ---------------- Derived state ---------------- */
+
+  function counts() {
+    var done = 0, skipped = 0;
+    var tl = todayLog();
+    tasks.forEach(function (t) {
+      var e = tl[t.id];
+      if (e && e.status === "done") done++;
+      else if (e && e.status === "skipped") skipped++;
+    });
+    return { done: done, skipped: skipped, total: tasks.length };
+  }
+
+  function allActioned(c) {
+    return c.total > 0 && c.done + c.skipped === c.total;
+  }
+
+  function currentPeriodId() {
+    var h = new Date().getHours();
+    for (var i = 0; i < PERIODS.length; i++) {
+      if (h >= PERIODS[i].startHour && h < PERIODS[i].endHour) return PERIODS[i].id;
+    }
+    return null; // before 6am
+  }
+
+  /* ---------------- Rendering ---------------- */
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  function render() {
+    renderGreeting();
+    renderHero();
+    renderTimeline();
+  }
+
+  function renderGreeting() {
+    var h = new Date().getHours();
+    var g = h < 12 ? "Good morning! 🌅" : h < 18 ? "Good afternoon! ☀️" : "Good evening! 🌙";
+    $("greeting-text").textContent = g;
+    $("date-text").textContent = new Date().toLocaleDateString(undefined, {
+      weekday: "long", day: "numeric", month: "long"
+    });
+  }
+
+  function renderHero() {
+    var c = counts();
+    var circumference = 326.7;
+    var ratio = c.total ? c.done / c.total : 0;
+
+    $("ring-fill").style.strokeDashoffset = String(circumference * (1 - ratio));
+    $("ring-count").textContent = c.done + "/" + c.total;
+    $("stat-stars").textContent = "⭐ " + c.done;
+    $("stat-streak").textContent = "🔥 " + streakInfo.count;
+
+    var msgIndex = Math.min(
+      Math.floor(ratio * (ENCOURAGEMENTS.length - 1)),
+      ENCOURAGEMENTS.length - 1
+    );
+    var msg = c.done === c.total && c.total > 0
+      ? "All done! Fantastic! 🎉"
+      : ENCOURAGEMENTS[msgIndex];
+    $("hero-message").textContent = msg;
+
+    $("hero-card").classList.toggle("all-done", c.done === c.total && c.total > 0);
+  }
+
+  function renderTimeline() {
+    var container = $("timeline");
+    container.innerHTML = "";
+    var nowPeriod = currentPeriodId();
+
+    PERIODS.forEach(function (p) {
+      var periodTasks = tasks.filter(function (t) { return t.period === p.id; });
+
+      var section = document.createElement("section");
+      section.className = "period" + (p.id === nowPeriod ? " now" : "");
+      section.id = "period-" + p.id;
+
+      var head = document.createElement("div");
+      head.className = "period-head";
+      head.innerHTML =
+        '<div class="period-dot">' + p.emoji + "</div>" +
+        '<div class="period-title">' + p.label + "</div>" +
+        (p.id === nowPeriod ? '<div class="now-badge">NOW</div>' : "");
+      section.appendChild(head);
+
+      if (periodTasks.length === 0) {
+        var empty = document.createElement("div");
+        empty.className = "period-empty";
+        empty.textContent = "No tasks — free time! 😊";
+        section.appendChild(empty);
+      }
+
+      periodTasks.forEach(function (t, i) {
+        section.appendChild(taskCard(t, i));
+      });
+
+      container.appendChild(section);
+    });
+  }
+
+  function taskCard(task, index) {
+    var entry = entryFor(task.id);
+    var status = entry ? entry.status : "pending";
+
+    var card = document.createElement("div");
+    card.className = "task-card " + (status === "done" ? "done" : status === "skipped" ? "skipped" : "");
+    card.style.animationDelay = (index * 0.05) + "s";
+    card.dataset.taskId = task.id;
+
+    var statusText = status === "done"
+      ? "Done at " + (entry.at || "") + " ✓"
+      : status === "skipped"
+        ? "Cannot do today"
+        : "Not done yet";
+
+    card.innerHTML =
+      '<div class="task-main">' +
+        '<div class="task-emoji">' + task.emoji + "</div>" +
+        '<div class="task-info">' +
+          '<div class="task-title">' + escapeHtml(task.title) + "</div>" +
+          '<div class="task-status">' + statusText + "</div>" +
+          (status === "skipped" && entry.reason
+            ? '<div class="reason-chip">💬 ' + escapeHtml(entry.reason + (entry.remark ? " — " + entry.remark : "")) + "</div>"
+            : "") +
+        "</div>" +
+      "</div>" +
+      '<div class="task-actions">' +
+        '<button class="tick-btn" aria-label="Mark done">' +
+          '<svg viewBox="0 0 32 32"><path class="tick-path" d="M7 17 L13 23 L25 9"/></svg>' +
+          '<span class="tick-label">' + (status === "done" ? "Done!" : "Done") + "</span>" +
+        "</button>" +
+        '<button class="cannot-btn">Cannot 😕</button>' +
+      "</div>";
+
+    card.querySelector(".tick-btn").addEventListener("click", function (ev) {
+      toggleDone(task.id, ev);
+    });
+    card.querySelector(".cannot-btn").addEventListener("click", function () {
+      openSheet(task.id);
+    });
+
+    return card;
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  /* ---------------- Actions ---------------- */
+
+  function toggleDone(taskId, ev) {
+    var tl = todayLog();
+    var entry = tl[taskId];
+
+    if (entry && entry.status === "done") {
+      // Undo
+      delete tl[taskId];
+      save(STORE.log, log);
+      render();
+      return;
+    }
+
+    var now = new Date();
+    tl[taskId] = {
+      status: "done",
+      at: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    };
+    save(STORE.log, log);
+
+    starBurst(ev);
+    confettiBurst(ev, 18);
+    vibrate(30);
+    render();
+
+    maybeCelebrate(550);
+  }
+
+  function maybeCelebrate(delay) {
+    var c = counts();
+    if (allActioned(c) && !celebrated) {
+      celebrated = true;
+      updateStreak();
+      setTimeout(showCelebration, delay);
+    }
+  }
+
+  function updateStreak() {
+    var today = todayKey();
+    if (streakInfo.lastDate === today) return;
+    streakInfo.count = streakInfo.lastDate === todayKey(-1) ? streakInfo.count + 1 : 1;
+    streakInfo.lastDate = today;
+    save(STORE.streak, streakInfo);
+  }
+
+  /* ---------------- "Cannot do" sheet ---------------- */
+
+  function openSheet(taskId) {
+    sheetTaskId = taskId;
+    sheetReason = null;
+    var task = tasks.find(function (t) { return t.id === taskId; });
+    $("sheet-task-title").textContent = task.emoji + " " + task.title;
+    $("remark-input").value = "";
+    $("sheet-save").disabled = true;
+    document.querySelectorAll(".reason-btn").forEach(function (b) { b.classList.remove("selected"); });
+    $("sheet-backdrop").hidden = false;
+    $("remark-sheet").hidden = false;
+  }
+
+  function closeSheet() {
+    $("sheet-backdrop").hidden = true;
+    $("remark-sheet").hidden = true;
+    sheetTaskId = null;
+  }
+
+  function saveSkip() {
+    if (!sheetTaskId || !sheetReason) return;
+    var tl = todayLog();
+    tl[sheetTaskId] = {
+      status: "skipped",
+      reason: sheetReason,
+      remark: $("remark-input").value.trim(),
+      at: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    };
+    save(STORE.log, log);
+    closeSheet();
+    toast("Message saved. Thank you for telling! 🙏");
+    render();
+    maybeCelebrate(900);
+  }
+
+  /* ---------------- Celebration ---------------- */
+
+  function showCelebration() {
+    var c = counts();
+    if (c.skipped === 0) {
+      $("celebrate-title").textContent = "All tasks done!";
+      $("celebrate-sub").textContent = "Amazing work today! 🌟";
+    } else {
+      $("celebrate-title").textContent = "Day complete!";
+      $("celebrate-sub").textContent = c.done + " done ✓ · " + c.skipped + " reported 💬 Thank you for being honest!";
+    }
+    var stars = "";
+    for (var i = 0; i < Math.min(c.done, 10); i++) stars += "⭐";
+    $("celebrate-stars").textContent = stars;
+    $("celebrate").hidden = false;
+    confettiRain();
+    vibrate([60, 40, 60]);
+  }
+
+  /* ---------------- Star + confetti effects ---------------- */
+
+  function starBurst(ev) {
+    if (!ev) return;
+    var star = document.createElement("div");
+    star.className = "star-float";
+    star.textContent = "⭐ +1";
+    star.style.left = ev.clientX - 20 + "px";
+    star.style.top = ev.clientY - 20 + "px";
+    document.body.appendChild(star);
+    setTimeout(function () { star.remove(); }, 1000);
+  }
+
+  var canvas = $("confetti-canvas");
+  var ctx = canvas.getContext("2d");
+  var particles = [];
+  var rafId = null;
+  var COLORS = ["#ff3b30", "#ff9f0a", "#ffd60a", "#34c759", "#007aff", "#af52de"];
+
+  function sizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+
+  function confettiBurst(ev, n) {
+    sizeCanvas();
+    var x = ev ? ev.clientX : canvas.width / 2;
+    var y = ev ? ev.clientY : canvas.height / 3;
+    for (var i = 0; i < n; i++) {
+      particles.push({
+        x: x, y: y,
+        vx: (Math.random() - 0.5) * 9,
+        vy: -Math.random() * 8 - 2,
+        size: Math.random() * 6 + 4,
+        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+        rot: Math.random() * Math.PI,
+        vr: (Math.random() - 0.5) * 0.3,
+        life: 70
+      });
+    }
+    if (!rafId) tick();
+  }
+
+  function confettiRain() {
+    sizeCanvas();
+    for (var i = 0; i < 120; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: -20 - Math.random() * canvas.height * 0.5,
+        vx: (Math.random() - 0.5) * 2,
+        vy: Math.random() * 3 + 2,
+        size: Math.random() * 7 + 4,
+        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+        rot: Math.random() * Math.PI,
+        vr: (Math.random() - 0.5) * 0.2,
+        life: 220
+      });
+    }
+    if (!rafId) tick();
+  }
+
+  function tick() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    particles = particles.filter(function (p) { return p.life > 0 && p.y < canvas.height + 30; });
+    particles.forEach(function (p) {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.25;
+      p.rot += p.vr;
+      p.life--;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = Math.min(1, p.life / 30);
+      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+      ctx.restore();
+    });
+    if (particles.length) {
+      rafId = requestAnimationFrame(tick);
+    } else {
+      rafId = null;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+
+  function vibrate(pattern) {
+    if (navigator.vibrate) navigator.vibrate(pattern);
+  }
+
+  /* ---------------- Toast ---------------- */
+
+  var toastTimer = null;
+
+  function toast(msg) {
+    var el = $("toast");
+    el.textContent = msg;
+    el.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.hidden = true; }, 2600);
+  }
+
+  /* ---------------- Reminders ---------------- */
+
+  var firedReminders = {};
+
+  function toggleReminders() {
+    if (!("Notification" in window)) {
+      toast("This phone cannot show reminders 😢");
+      return;
+    }
+    if (remindersOn) {
+      remindersOn = false;
+      save(STORE.notify, false);
+      toast("Reminders OFF 🔕");
+      return;
+    }
+    Notification.requestPermission().then(function (perm) {
+      if (perm === "granted") {
+        remindersOn = true;
+        save(STORE.notify, true);
+        toast("Reminders ON 🔔 I will remind you!");
+      } else {
+        toast("Please allow notifications in phone settings");
+      }
+    });
+  }
+
+  function checkReminders() {
+    if (!remindersOn || !("Notification" in window) || Notification.permission !== "granted") return;
+    var now = new Date();
+    var minutes = now.getHours() * 60 + now.getMinutes();
+    var tl = todayLog();
+
+    PERIODS.forEach(function (p) {
+      var fireKey = todayKey() + "-" + p.id;
+      if (firedReminders[fireKey]) return;
+      if (minutes < p.reminderMin || minutes > p.reminderMin + 5) return;
+
+      var pending = tasks.filter(function (t) {
+        return t.period === p.id && !tl[t.id];
+      });
+      if (pending.length === 0) { firedReminders[fireKey] = true; return; }
+
+      firedReminders[fireKey] = true;
+      var first = pending[0];
+      new Notification("HomeHero " + p.emoji + " " + p.label + " tasks", {
+        body: pending.length + " task(s) to do — start with " + first.emoji + " " + first.title,
+        tag: "homehero-" + p.id
+      });
+    });
+  }
+
+  /* ---------------- History (transparency) ---------------- */
+
+  function renderHistory() {
+    var body = $("history-body");
+    body.innerHTML = "";
+
+    for (var i = 0; i < 7; i++) {
+      var key = todayKey(-i);
+      var dayLog = log[key] || {};
+      var done = 0, remarks = [];
+
+      tasks.forEach(function (t) {
+        var e = dayLog[t.id];
+        if (e && e.status === "done") done++;
+        if (e && e.status === "skipped") {
+          remarks.push(t.emoji + " " + t.title + ": " + (e.reason || "") + (e.remark ? " — " + e.remark : ""));
+        }
+      });
+
+      var total = tasks.length;
+      var pct = total ? Math.round((done / total) * 100) : 0;
+      var dateLabel = i === 0 ? "Today" : i === 1 ? "Yesterday"
+        : new Date(key + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+      var scoreClass = pct === 100 ? "good" : pct > 0 ? "partial" : "none";
+      var scoreEmoji = pct === 100 ? "🏆 " : "";
+
+      var el = document.createElement("div");
+      el.className = "history-day";
+      el.innerHTML =
+        '<div class="history-day-head">' +
+          "<span>" + dateLabel + "</span>" +
+          '<span class="history-score ' + scoreClass + '">' + scoreEmoji + done + "/" + total + "</span>" +
+        "</div>" +
+        '<div class="history-bar"><div class="history-bar-fill" style="width:' + pct + '%"></div></div>' +
+        (remarks.length
+          ? '<ul class="history-remarks">' + remarks.map(function (r) {
+              return "<li>💬 " + escapeHtml(r) + "</li>";
+            }).join("") + "</ul>"
+          : "");
+      body.appendChild(el);
+    }
+  }
+
+  /* ---------------- Settings ---------------- */
+
+  function renderSettings() {
+    var list = $("settings-task-list");
+    list.innerHTML = "";
+
+    tasks.forEach(function (t) {
+      var p = PERIODS.find(function (x) { return x.id === t.period; });
+      var row = document.createElement("div");
+      row.className = "settings-row";
+      row.innerHTML =
+        '<span class="s-emoji">' + t.emoji + "</span>" +
+        '<span class="s-title">' + escapeHtml(t.title) + "</span>" +
+        '<span class="s-period">' + p.emoji + " " + p.label + "</span>" +
+        '<button class="s-delete" aria-label="Delete task">🗑</button>';
+      row.querySelector(".s-delete").addEventListener("click", function () {
+        if (confirm("Remove \"" + t.title + "\" from the daily list?")) {
+          tasks = tasks.filter(function (x) { return x.id !== t.id; });
+          save(STORE.tasks, tasks);
+          renderSettings();
+          render();
+        }
+      });
+      list.appendChild(row);
+    });
+
+    // Emoji picker
+    var picker = $("emoji-picker");
+    picker.innerHTML = "";
+    EMOJI_CHOICES.forEach(function (e) {
+      var b = document.createElement("button");
+      b.className = "emoji-option" + (e === addEmoji ? " selected" : "");
+      b.textContent = e;
+      b.addEventListener("click", function () {
+        addEmoji = e;
+        picker.querySelectorAll(".emoji-option").forEach(function (x) { x.classList.remove("selected"); });
+        b.classList.add("selected");
+      });
+      picker.appendChild(b);
+    });
+
+    // Period picker
+    var pp = $("period-picker");
+    pp.innerHTML = "";
+    PERIODS.forEach(function (p) {
+      var b = document.createElement("button");
+      b.className = "period-option" + (p.id === addPeriod ? " selected" : "");
+      b.innerHTML = '<span class="p-emoji">' + p.emoji + "</span>" + p.label;
+      b.addEventListener("click", function () {
+        addPeriod = p.id;
+        pp.querySelectorAll(".period-option").forEach(function (x) { x.classList.remove("selected"); });
+        b.classList.add("selected");
+      });
+      pp.appendChild(b);
+    });
+  }
+
+  function addTask() {
+    var title = $("new-task-title").value.trim();
+    if (!title) {
+      toast("Please type the task name ✏️");
+      return;
+    }
+    tasks.push({
+      id: "t" + Date.now(),
+      emoji: addEmoji,
+      title: title,
+      period: addPeriod
+    });
+    save(STORE.tasks, tasks);
+    $("new-task-title").value = "";
+    renderSettings();
+    render();
+    toast("Task added ✅");
+  }
+
+  /* ---------------- Wiring ---------------- */
+
+  function init() {
+    render();
+
+    // Sheet
+    $("sheet-cancel").addEventListener("click", closeSheet);
+    $("sheet-backdrop").addEventListener("click", closeSheet);
+    $("sheet-save").addEventListener("click", saveSkip);
+    document.querySelectorAll(".reason-btn").forEach(function (b) {
+      b.addEventListener("click", function () {
+        sheetReason = b.dataset.reason;
+        document.querySelectorAll(".reason-btn").forEach(function (x) { x.classList.remove("selected"); });
+        b.classList.add("selected");
+        $("sheet-save").disabled = false;
+      });
+    });
+
+    // Celebration
+    $("celebrate-close").addEventListener("click", function () {
+      $("celebrate").hidden = true;
+    });
+
+    // Modals
+    $("btn-history").addEventListener("click", function () {
+      renderHistory();
+      $("history-modal").hidden = false;
+    });
+    $("btn-settings").addEventListener("click", function () {
+      renderSettings();
+      $("settings-modal").hidden = false;
+    });
+    document.querySelectorAll(".modal-close").forEach(function (b) {
+      b.addEventListener("click", function () {
+        $(b.dataset.close).hidden = true;
+      });
+    });
+    document.querySelectorAll(".modal").forEach(function (m) {
+      m.addEventListener("click", function (ev) {
+        if (ev.target === m) m.hidden = true;
+      });
+    });
+
+    // Settings actions
+    $("btn-add-task").addEventListener("click", addTask);
+
+    // Reminders
+    $("btn-bell").addEventListener("click", toggleReminders);
+    setInterval(checkReminders, 60 * 1000);
+    checkReminders();
+
+    // Keep "NOW" badge and greeting fresh
+    setInterval(function () {
+      renderGreeting();
+      renderTimeline();
+    }, 5 * 60 * 1000);
+
+    // If the day is already complete when opening, don't re-celebrate
+    var c = counts();
+    celebrated = allActioned(c);
+
+    // Scroll to the current time period for instant orientation
+    var nowP = currentPeriodId();
+    if (nowP && c.done + c.skipped > 0) {
+      var el = $("period-" + nowP);
+      if (el) setTimeout(function () {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 400);
+    }
+
+    window.addEventListener("resize", sizeCanvas);
+
+    // Offline support for the hosted version (no-op when opened as a file)
+    if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
+      navigator.serviceWorker.register("sw.js").catch(function () { /* offline-first is best-effort */ });
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", init);
+})();
+</script>
+</body>
+</html>
