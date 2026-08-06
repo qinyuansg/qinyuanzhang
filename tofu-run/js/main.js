@@ -42,6 +42,12 @@ const audio = new AudioSys();
 const hud = new HUD();
 
 // ---------- game state ----------
+// storage that survives sandboxed iframes where localStorage throws
+const store = {
+  get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* no persistence */ } },
+};
+
 const G = {
   state: 'menu',
   time: 0,
@@ -58,8 +64,8 @@ const G = {
   crashReason: '',
   timescale: 1,
   milestone: 500,
-  best: parseFloat(localStorage.getItem('tofurun.best') || '0'),
-  bestDeliveries: parseInt(localStorage.getItem('tofurun.bestDel') || '0', 10),
+  best: parseFloat(store.get('tofurun.best', '0')),
+  bestDeliveries: parseInt(store.get('tofurun.bestDel', '0'), 10),
   muted: false,
 };
 hud.setMenuBest(G.best);
@@ -186,11 +192,11 @@ function gameOver(reason) {
   const isRecord = dist > G.best;
   if (isRecord) {
     G.best = dist;
-    localStorage.setItem('tofurun.best', String(dist));
+    store.set('tofurun.best', String(dist));
   }
   if (G.deliveries > G.bestDeliveries) {
     G.bestDeliveries = G.deliveries;
-    localStorage.setItem('tofurun.bestDel', String(G.deliveries));
+    store.set('tofurun.bestDel', String(G.deliveries));
   }
   hud.setMenuBest(G.best);
   const m = Math.floor(G.time / 60), s = (G.time % 60).toFixed(1);
