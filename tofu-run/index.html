@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"/>
+<title>TOFU RUN — Alpine Delivery</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='10' y='16' width='44' height='36' rx='8' fill='white' stroke='%2359e6ff' stroke-width='4'/%3E%3C/svg%3E"/>
+<link rel="stylesheet" href="css/style.css"/>
+<script type="importmap">{ "imports": { "three": "./js/vendor/three.module.js" } }</script>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<!-- in-run HUD -->
+<div id="hud" class="hidden">
+  <div id="timer" class="glass mono">00:00.0</div>
+  <div id="statsTop" class="glass">
+    <span id="dist" class="mono">0 m</span>
+    <span class="sep"></span>
+    <span id="tofu" class="mono">◻ 0</span>
+  </div>
+  <div id="rival" class="glass"><i class="dot"></i>RIVAL&nbsp;<span id="rivalGap" class="mono">55 m</span></div>
+  <div id="speedo">
+    <div id="speedVal">0</div>
+    <div class="unit">KM/H</div>
+  </div>
+  <div id="boostWrap">
+    <div id="boostTrack"><div id="boostBar"></div></div>
+    <div id="boostHint">COLLECT ORBS</div>
+  </div>
+  <div id="announce"></div>
+  <div id="vignette"></div>
+  <div id="flash"></div>
+</div>
+
+<!-- start menu -->
+<div id="menu" class="screen">
+  <div class="menu-inner">
+    <div class="kicker-line">ALPINE DELIVERY SERVICE</div>
+    <h1 class="title"><span>TOFU</span> RUN</h1>
+    <div id="menuBest" class="best mono">FIRST RUN — MAKE IT COUNT</div>
+    <button id="startBtn" class="cta">START RUN<span class="cta-sub">or press SPACE</span></button>
+    <div class="controls glass">
+      <div class="ctrl"><span class="key">◀ A</span><span class="key">D ▶</span><span class="lbl">carve heel / toe</span></div>
+      <div class="ctrl"><span class="key wide">SPACE ×2</span><span class="lbl">boost</span></div>
+      <div class="ctrl"><span class="key">R</span><span class="lbl">restart</span><span class="key">P</span><span class="lbl">pause</span><span class="key">M</span><span class="lbl">mute</span></div>
+    </div>
+    <div class="brief">Deliver the tofu down the mountain. Ride the gates, chain the orbs,<br/>dodge trees &amp; skiers — and never let the rival catch you.</div>
+  </div>
+</div>
+
+<!-- countdown -->
+<div id="countdown" class="screen transparent hidden">
+  <div id="countNum"></div>
+</div>
+
+<!-- game over -->
+<div id="gameover" class="screen hidden">
+  <div class="menu-inner">
+    <div class="kicker-line fail">RUN TERMINATED</div>
+    <div id="goReason" class="reason">YOU HIT A PINE TREE</div>
+    <div id="goRecord" class="record hidden">◆ NEW PERSONAL BEST ◆</div>
+    <div id="goStats" class="stats-grid"></div>
+    <button class="cta" onclick="window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyR'}))">RETRY<span class="cta-sub">or press R</span></button>
+  </div>
+</div>
+
+<!-- pause -->
+<div id="paused" class="screen hidden">
+  <div class="menu-inner">
+    <div class="kicker-line">PAUSED</div>
+    <div class="brief">Press P or SPACE to resume</div>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
