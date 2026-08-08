@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<title>Giraffe Jump! 长颈鹿跳跳</title>
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #fdfdf8;
+    touch-action: none;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+    position: fixed;
+  }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+'use strict';
+
+/* ============================================================
+   GIRAFFE JUMP! 长颈鹿跳跳
+   A one-touch endless runner for a 3-year-old, drawn in
+   "living marker" style based on her own drawing.
+   ============================================================ */
+
+/* ====================== TUNING CONSTANTS ====================== */
+/* All sizes are in "base units", multiplied by the scale S at draw
+   time. S = min(screenW, screenH) / BASE_H.                       */
+const BASE_H        = 500;    // reference screen size for scaling
+const SPEED_START   = 135;    // world scroll speed (base px / s)
+const SPEED_PER_TREE= 2.0;    // speed gained per cleared tree
+const SPEED_MAX     = 230;    // speed cap — always toddler-gentle
+const GRAVITY       = 1500;   // downward accel (base px / s^2)
+const GRAVITY_FLOAT = 0.55;   // gravity multiplier near jump apex
+const JUMP_V        = 800;    // initial jump velocity (base px / s)
+const JUMP_BUFFER_MS= 200;    // early-tap forgiveness window
+const TREE_GAP_SEC  = 2.9;    // min seconds of travel between trees
+const TREE_GAP_VAR  = 1.6;    // extra random seconds between trees
+const MILESTONE     = 5;      // trees per big celebration
+const BOIL_FPS      = 8;      // hand-drawn "boiling line" rate
+const BOIL_AMP      = 1.3;    // boiling jitter amplitude (px)
+const HITBOX_FRAC   = 0.55;   // fraction of trunk height that "hits"
+
+/* marker palette (from the drawing) */
+const PAPER  = '#fdfdf8';
+const BLUE   = '#3ab5d6';
+const GREEN  = '#3a9e3f';
+const BROWN  = '#b06f3d';
+const ORANGE = '#f29f2e';
+const YELLOW = '#f7ce3e';
+const PINK   = '#e2569b';
+const PURPLE = '#bb42c9';
+const RED    = '#e0532f';
+
+/* ====================== CANVAS / RESIZE ====================== */
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+let W = 0, H = 0, S = 1, dpr = 1;
+
+function resize() {
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  S = Math.min(W, H) / BASE_H;
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 200));
+resize();
+
+const groundY = () => H * 0.82;          // the brown horizon line
+const giraffeX = () => W * 0.20;          // giraffe left edge (fixed)
+
+/* ====================== BOILING-LINE JITTER ====================== */
+/* Deterministic pseudo-random offsets that change BOIL_FPS times a
+   second, so every stroke wiggles like hand-drawn animation.       */
+let boilFrame = 0;
+setInterval(() => { boilFrame = (boilFrame + 1) % 4096; }, 1000 / BOIL_FPS);
+let jIdx = 0; // per-frame jitter cursor, reset at start of draw()
+
+function jr(i) { // stable random in [-1,1] for (boilFrame, i)
+  const x = Math.sin(i * 127.1 + boilFrame * 311.7) * 43758.5453;
+  return (x - Math.floor(x)) * 2 - 1;
+}
+function j() { return jr(jIdx++) * BOIL_AMP; }
+
+/* ====================== MARKER-PEN PRIMITIVES ====================== */
+function pen(color, w) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(2, w * S);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+}
+/* wobbly line broken into segments, each vertex jittered */
+function wLine(x1, y1, x2, y2, segs) {
+  segs = segs || 4;
+  ctx.beginPath();
+  for (let i = 0; i <= segs; i++) {
+    const t = i / segs;
+    const x = x1 + (x2 - x1) * t + j();
+    const y = y1 + (y2 - y1) * t + j();
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  ctx.stroke();
+}
+/* wobbly circle / ellipse outline */
+function wOval(cx, cy, rx, ry, segs) {
+  segs = segs || 14;
+  ctx.beginPath();
+  for (let i = 0; i <= segs; i++) {
+    const a = i / segs * Math.PI * 2;
+    const x = cx + Math.cos(a) * rx + j();
+    const y = cy + Math.sin(a) * ry + j();
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  ctx.closePath();
+  ctx.stroke();
+}
+/* wobbly closed polygon through points [[x,y],...] */
+function wPoly(pts, close) {
+  ctx.beginPath();
+  pts.forEach((p, i) => {
+    const x = p[0] + j(), y = p[1] + j();
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  });
+  if (close !== false) ctx.closePath();
+  ctx.stroke();
+}
+/* pink flower-swirl spot (the giraffe's markings) */
+function spiral(cx, cy, rmax) {
+  ctx.beginPath();
+  const steps = 18, turns = 2.1;
+  for (let i = 0; i <= steps; i++) {
+    const a = i / steps * turns * Math.PI * 2;
+    const r = rmax * i / steps;
+    const x = cx + Math.cos(a) * r + j() * 0.6;
+    const y = cy + Math.sin(a) * r + j() * 0.6;
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  ctx.stroke();
+}
+/* little star / asterisk scribble (birds, confetti) */
+function scribbleStar(cx, cy, r, rot) {
+  ctx.beginPath();
+  for (let k = 0; k < 3; k++) {
+    const a = rot + k * Math.PI / 3;
+    ctx.moveTo(cx - Math.cos(a) * r + j() * 0.5, cy - Math.sin(a) * r + j() * 0.5);
+    ctx.lineTo(cx + Math.cos(a) * r + j() * 0.5, cy + Math.sin(a) * r + j() * 0.5);
+  }
+  ctx.stroke();
+}
+/* filled marker blob (loose scribble fill + outline) */
+function markerDot(cx, cy, r, fill, outline) {
+  ctx.globalAlpha = 0.85;
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.arc(cx + j() * 0.5, cy + j() * 0.5, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  if (outline) { pen(outline, 2); wOval(cx, cy, r, r, 9); }
+}
+
+/* ====================== AUDIO (Web Audio only) ====================== */
+let ac = null, masterGain = null, musicGain = null, sfxGain = null;
+let muted = false, melodyTimer = null, melodyIdx = 0, melodyNext = 0;
+const midi = m => 440 * Math.pow(2, (m - 69) / 12);
+/* Twinkle Twinkle (public domain), music-box style. 0 = rest */
+const MELODY = [72,72,79,79,81,81,79,0, 77,77,76,76,74,74,72,0,
+                79,79,77,77,76,76,74,0, 79,79,77,77,76,76,74,0];
+
+function initAudio() {
+  if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+  try {
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = ac.createGain(); masterGain.gain.value = muted ? 0 : 0.9;
+    masterGain.connect(ac.destination);
+    musicGain = ac.createGain(); musicGain.gain.value = 0.13;
+    musicGain.connect(masterGain);
+    sfxGain = ac.createGain(); sfxGain.gain.value = 0.5;
+    sfxGain.connect(masterGain);
+    melodyNext = ac.currentTime + 0.2;
+    melodyTimer = setInterval(scheduleMelody, 150);
+  } catch (e) { /* no audio available — game still plays silently */ }
+}
+/* soft xylophone / music-box note */
+function note(freq, t, dur, vol, dest) {
+  if (!ac) return;
+  dur = dur || 0.35; vol = vol || 1; dest = dest || sfxGain;
+  const o = ac.createOscillator(), o2 = ac.createOscillator(), g = ac.createGain();
+  o.type = 'sine';      o.frequency.value = freq;
+  o2.type = 'triangle'; o2.frequency.value = freq * 2;
+  const g2 = ac.createGain(); g2.gain.value = 0.18;
+  o.connect(g); o2.connect(g2); g2.connect(g);
+  g.connect(dest);
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vol, t + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.start(t); o2.start(t); o.stop(t + dur + 0.05); o2.stop(t + dur + 0.05);
+}
+function scheduleMelody() {
+  if (!ac || state !== 'play') return;
+  while (melodyNext < ac.currentTime + 0.6) {
+    const m = MELODY[melodyIdx % MELODY.length];
+    if (m) note(midi(m), melodyNext, 0.5, 0.8, musicGain);
+    melodyIdx++; melodyNext += 0.42;
+  }
+}
+/* one-shot pitch-sweep helper for sound effects */
+function sweep(type, f0, f1, dur, vol) {
+  if (!ac) return;
+  const t = ac.currentTime;
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(sfxGain);
+  o.start(t); o.stop(t + dur + 0.05);
+}
+const sfxJump    = () => sweep('triangle', 240, 620, 0.24, 0.7);          // rising boing
+const sfxBonk    = () => sweep('triangle', 150, 65, 0.28, 0.8);           // friendly bonk
+const sfxPlop    = () => sweep('sine', 620, 170, 0.1, 0.5);               // orange plop
+function sfxChime() { if (!ac) return; const t = ac.currentTime;
+  note(midi(88), t, 0.3, 0.8); note(midi(91), t + 0.1, 0.4, 0.8); }       // clear-a-tree
+function sfxFanfare() { if (!ac) return; const t = ac.currentTime;
+  [72, 76, 79, 84].forEach((m, i) => note(midi(m), t + i * 0.12, 0.3, 0.9));
+  note(midi(88), t + 0.48, 0.7, 1); note(midi(84), t + 0.48, 0.7, 0.6); } // milestone
+function toggleMute() {
+  muted = !muted;
+  if (masterGain) masterGain.gain.value = muted ? 0 : 0.9;
+}
+
+/* ====================== GAME STATE ====================== */
+let state = 'start';            // 'start' | 'play'
+let player = { y: 0, vy: 0, wobble: 0 };  // y = height above ground (base px * S applied later)
+let trees = [], clouds = [], birds = [], flights = [], bounces = [], confetti = [];
+let cleared = 0, basketFill = 0;
+let treeGap = 0;                // px until next tree spawn
+let lastTap = -9999;            // for the jump buffer
+let bubbleT = 0;                // "哎呀!" bubble timer
+let pig = { hop: 0, dance: 0, blink: 0 };
+let sunSpin = 0, celebrate = 0, pendingCelebrate = 0, birdTimer = 3;
+let tNow = 0;
+
+function initClouds() {
+  clouds = [];
+  for (let i = 0; i < 4; i++) {
+    clouds.push({ x: Math.random() * W, y: (0.06 + Math.random() * 0.16) * H,
+                  r: 34 + Math.random() * 26, seed: Math.random() * 10 });
+  }
+}
+initClouds();
+
+function speed() {
+  return Math.min(SPEED_MAX, SPEED_START + cleared * SPEED_PER_TREE) * S;
+}
+
+function spawnTree() {
+  const trunkH = 105 + Math.random() * 55;      // base units
+  const canopyR = 46 + Math.random() * 14;
+  const oranges = [];
+  for (let i = 0; i < 8; i++) {                  // fruit stuck in the leaves
+    const a = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * 0.9;
+    oranges.push([Math.cos(a) * rr, Math.sin(a) * rr * 0.8 - 0.15]);
+  }
+  trees.push({ x: W + 120 * S, trunkH, canopyR, oranges,
+               seed: Math.random() * 10, counted: false, bumped: false, wobble: 0 });
+}
+
+function spawnBird(loop) {
+  birds.push({ x: W + 30, y: (0.08 + Math.random() * 0.2) * H,
+               vx: (60 + Math.random() * 50) * S, ph: Math.random() * 7, loop: !!loop, lt: 0 });
+}
+
+function jump() {
+  if (player.y <= 0.01) {
+    player.vy = JUMP_V;
+    player.y = 0.02;
+    sfxJump();
+  }
+}
+
+/* ====================== INPUT (one action: tap) ====================== */
+function onTap(x, y) {
+  initAudio();                                  // autoplay rules: unlock on gesture
+  if (state === 'start') { state = 'play'; return; }
+  /* speaker icon hit test (top-right) */
+  const mx = W - 44 * Math.min(S, 1.4), my = 40 * Math.min(S, 1.4);
+  if (x !== undefined && Math.hypot(x - mx, y - my) < 40 * Math.min(S, 1.4)) {
+    toggleMute(); return;
+  }
+  lastTap = performance.now();                  // buffered — a hair-early tap still jumps
+  jump();
+}
+window.addEventListener('pointerdown', e => { e.preventDefault(); onTap(e.clientX, e.clientY); });
+window.addEventListener('keydown', e => { if (!e.repeat) onTap(); });
+/* kill double-tap zoom / scroll / pinch on iPad */
+document.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+document.addEventListener('touchmove',  e => e.preventDefault(), { passive: false });
+document.addEventListener('gesturestart', e => e.preventDefault());
+document.addEventListener('dblclick', e => e.preventDefault());
+
+/* ====================== UPDATE ====================== */
+function update(dt) {
+  tNow += dt;
+  const g = groundY(), gx = giraffeX();
+
+  /* ---- clouds drift on a slow parallax layer, even on start screen ---- */
+  const spd = state === 'play' ? speed() : 30 * S;
+  clouds.forEach(c => {
+    c.x -= spd * 0.22 * dt;
+    if (c.x < -c.r * 3 * S) { c.x = W + c.r * 3 * S; c.y = (0.06 + Math.random() * 0.16) * H; }
+  });
+
+  /* ---- birds flutter by occasionally ---- */
+  birdTimer -= dt;
+  if (birdTimer <= 0) { spawnBird(); birdTimer = 4 + Math.random() * 6; }
+  birds.forEach(b => { b.x -= b.vx * dt; b.lt += dt; });
+  birds = birds.filter(b => b.x > -60);
+
+  /* ---- timers that tick in every state ---- */
+  pig.blink -= dt; if (pig.blink < -3) pig.blink = 0.14;
+  pig.hop = Math.max(0, pig.hop - dt);
+  pig.dance = Math.max(0, pig.dance - dt);
+  bubbleT = Math.max(0, bubbleT - dt);
+  player.wobble = Math.max(0, player.wobble - dt);
+  sunSpin += dt * (celebrate > 0 ? 4 : 0.15);
+  celebrate = Math.max(0, celebrate - dt);
+
+  if (state !== 'play') return;
+
+  /* ---- giraffe jump physics: floaty near the apex ---- */
+  if (player.y > 0 || player.vy > 0) {
+    const floaty = Math.abs(player.vy) < 220 ? GRAVITY_FLOAT : 1;
+    player.vy -= GRAVITY * floaty * dt;
+    player.y += player.vy * dt;
+    if (player.y <= 0) {
+      player.y = 0; player.vy = 0;
+      if (performance.now() - lastTap < JUMP_BUFFER_MS) jump(); // buffered tap
+    }
+  }
+
+  /* ---- world scroll + tree spawning ---- */
+  const dx = speed() * dt;
+  treeGap -= dx;
+  if (treeGap <= 0) {
+    spawnTree();
+    treeGap = speed() * (TREE_GAP_SEC + Math.random() * TREE_GAP_VAR);
+  }
+
+  trees.forEach(tr => {
+    tr.x -= dx;
+    tr.wobble = Math.max(0, tr.wobble - dt);
+
+    /* very forgiving collision: narrow trunk, must be quite low to bump */
+    const trunkTop = tr.trunkH * S * HITBOX_FRAC;
+    if (!tr.bumped && !tr.counted &&
+        tr.x > gx + 45 * S && tr.x < gx + 115 * S &&
+        player.y * S < trunkTop) {
+      /* soft bump: NO game over, just comedy */
+      tr.bumped = true;
+      tr.wobble = 1.0;
+      player.wobble = 0.9;
+      bubbleT = 1.4;
+      sfxBonk();
+      for (let i = 0; i < 3; i++) {             // a few oranges pop off & bounce
+        bounces.push({ x: tr.x + (Math.random() - 0.5) * 40 * S,
+                       y: g - (tr.trunkH + tr.canopyR) * S,
+                       vx: (Math.random() - 0.5) * 260 * S,
+                       vy: -(150 + Math.random() * 180) * S, life: 1.8 });
+      }
+    }
+
+    /* passed the giraffe → cleared! (unless it was bumped) */
+    if (!tr.counted && tr.x < gx - 20 * S) {
+      tr.counted = true;
+      if (!tr.bumped) {
+        cleared++;
+        pig.hop = 0.7;                           // the pig cheers
+        sfxChime();
+        for (let i = 0; i < 3; i++) {            // oranges arc into the basket
+          flights.push({ x0: tr.x, y0: g - (tr.trunkH + tr.canopyR * 0.5) * S,
+                         t: -i * 0.12, dur: 0.85, counter: i === 0 });
+        }
+        if (cleared % MILESTONE === 0) pendingCelebrate = 0.95;
+      }
+    }
+  });
+  trees = trees.filter(tr => tr.x > -150 * S);
+
+  /* ---- flying oranges (tree → basket) ---- */
+  const bp = basketPos();
+  flights.forEach(f => {
+    f.t += dt;
+    if (f.t >= f.dur && !f.done) {
+      f.done = true;
+      sfxPlop();
+      if (f.counter) basketFill = Math.min(MILESTONE, basketFill + 1);
+    }
+  });
+  flights = flights.filter(f => !f.done);
+
+  /* ---- bouncing oranges (bump) ---- */
+  bounces.forEach(o => {
+    o.vy += GRAVITY * S * dt * 0.9;
+    o.x += o.vx * dt; o.y += o.vy * dt;
+    if (o.y > g - 6 * S && o.vy > 0) { o.y = g - 6 * S; o.vy *= -0.45; o.vx *= 0.8; }
+    o.life -= dt;
+  });
+  bounces = bounces.filter(o => o.life > 0);
+
+  /* ---- milestone celebration ---- */
+  if (pendingCelebrate > 0) {
+    pendingCelebrate -= dt;
+    if (pendingCelebrate <= 0) startCelebration();
+  }
+  confetti.forEach(p => {
+    p.vy += 320 * S * dt;
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.rot += p.vr * dt; p.life -= dt;
+  });
+  confetti = confetti.filter(p => p.life > 0);
+}
+
+function startCelebration() {
+  celebrate = 3.0;
+  pig.dance = 3.0;
+  basketFill = 0;                                // basket empties, ready to refill
+  sfxFanfare();
+  for (let i = 0; i < 3; i++) spawnBird(true);   // birds do a fly-by loop
+  for (let i = 0; i < 70; i++) {                 // star & orange confetti
+    confetti.push({ x: Math.random() * W, y: -20 - Math.random() * H * 0.3,
+                    vx: (Math.random() - 0.5) * 120 * S, vy: (40 + Math.random() * 120) * S,
+                    rot: Math.random() * 7, vr: (Math.random() - 0.5) * 6,
+                    type: Math.random() < 0.55 ? 'star' : 'orange',
+                    color: [GREEN, PINK, BLUE, PURPLE, ORANGE, YELLOW][i % 6],
+                    life: 2 + Math.random() * 1.5 });
+  }
+}
+
+/* ====================== DRAW: SCENERY ====================== */
+function drawSun() {
+  const cx = W * 0.1, cy = H * 0.13;
+  const pulse = 1 + 0.05 * Math.sin(tNow * 2);
+  const r = 26 * S * pulse;
+  pen(BLUE, 2.6);
+  wOval(cx, cy, r, r, 12);
+  wOval(cx + 2 * S, cy + 1 * S, r * 0.72, r * 0.72, 10);  // scribbly inner circle
+  for (let i = 0; i < 11; i++) {                          // long wiggly rays
+    const a = sunSpin + i / 11 * Math.PI * 2;
+    const r1 = r * 1.15, r2 = r * (1.6 + 0.25 * jr(i + 800) * 0.5 + 0.25);
+    wLine(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1,
+          cx + Math.cos(a) * r2, cy + Math.sin(a) * r2, 2);
+  }
+}
+function drawCloud(c) {
+  pen(BLUE, 2.6);
+  const r = c.r * S;
+  ctx.beginPath();
+  const segs = 16;
+  for (let i = 0; i <= segs; i++) {
+    const a = i / segs * Math.PI * 2;
+    const bump = 1 + 0.22 * Math.sin(a * 3 + c.seed) + 0.1 * Math.sin(a * 5 + c.seed * 2);
+    const x = c.x + Math.cos(a) * r * 1.6 * bump + j();
+    const y = c.y + Math.sin(a) * r * 0.62 * bump + j();
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  ctx.closePath();
+  ctx.stroke();
+}
+function drawBird(b) {
+  pen(GREEN, 2.4);
+  const flap = Math.sin(b.lt * 10 + b.ph) * 0.5;
+  let y = b.y;
+  if (b.loop) y += Math.sin(b.lt * 3) * 40 * S;           // celebration loops
+  scribbleStar(b.x, y + Math.sin(b.lt * 6 + b.ph) * 6 * S, 9 * S, flap);
+}
+function drawGround() {
+  pen(BROWN, 3.2);
+  const g = groundY();
+  wLine(-10, g, W + 10, g, Math.max(6, Math.round(W / 90)));
+}
+
+/* ====================== DRAW: TREE ====================== */
+function drawTree(tr) {
+  const g = groundY();
+  const rot = tr.wobble > 0 ? Math.sin(tr.wobble * 18) * 0.05 * tr.wobble : 0;
+  ctx.save();
+  ctx.translate(tr.x, g);
+  ctx.rotate(rot);
+  const th = tr.trunkH * S, cr = tr.canopyR * S;
+  const wTop = 16 * S, wBot = 30 * S;
+
+  /* trunk: widens at the base, like the drawing */
+  pen(BROWN, 3);
+  wPoly([[-wTop, -th], [-wBot, 0], [wBot, 0], [wTop, -th]], false);
+  /* bark: rows of short dash marks */
+  pen(BROWN, 2.2);
+  for (let yy = -th + 10 * S; yy < -8 * S; yy += 14 * S) {
+    const rowW = wTop + (wBot - wTop) * (1 + yy / th);
+    for (let xx = -rowW + 6 * S; xx < rowW - 4 * S; xx += 11 * S) {
+      if (jr(tr.seed * 50 + yy + xx) > -0.4) wLine(xx, yy, xx + 1, yy + 6 * S, 1);
+    }
+  }
+
+  /* canopy: big fluffy dashed-line blobs */
+  const cy = -th - cr * 0.55;
+  pen(GREEN, 3);
+  wOval(0, cy, cr * 1.25, cr * 0.95, 16);
+  wOval(0, cy - cr * 0.85, cr * 0.6, cr * 0.5, 12);
+  /* leafy interior: short curved dashes */
+  pen(GREEN, 2);
+  for (let i = 0; i < 26; i++) {
+    const a = jr(tr.seed * 31 + i) * Math.PI, rr = Math.abs(jr(tr.seed * 17 + i * 3));
+    const lx = Math.cos(a * 3 + i) * cr * rr, ly = cy - cr * 0.3 + Math.sin(a * 2 + i) * cr * 0.7 * rr;
+    wLine(lx, ly, lx + 1 * S, ly + 7 * S, 1);
+  }
+  /* round oranges nestled in the leaves */
+  tr.oranges.forEach(o => {
+    markerDot(o[0] * cr * 1.1, cy + o[1] * cr, 6.5 * S, ORANGE, RED);
+  });
+  ctx.restore();
+}
+
+/* ====================== DRAW: PIG (the cheerleader) ====================== */
+function drawPig() {
+  const g = groundY();
+  const px = Math.max(50 * S, W * 0.07);
+  const hop = pig.hop > 0 ? Math.abs(Math.sin(pig.hop * Math.PI * 2.8)) * 26 * S : 0;
+  const dance = pig.dance > 0 ? Math.sin(tNow * 10) * 0.14 : 0;
+  const r = 32 * S;
+  ctx.save();
+  ctx.translate(px, g - r - 14 * S - hop);
+  ctx.rotate(dance);
+  pen(PURPLE, 3);
+  wOval(0, 0, r, r, 14);                                   // round body-head
+  /* big pointy ears */
+  wPoly([[-r * 0.75, -r * 0.55], [-r * 0.95, -r * 1.5], [-r * 0.25, -r * 0.92]], false);
+  wPoly([[r * 0.25, -r * 0.92], [r * 0.55, -r * 1.5], [r * 0.8, -r * 0.55]], false);
+  /* face: brows, eyes, snout, open happy mouth */
+  pen(PURPLE, 2.2);
+  wLine(-r * 0.42, -r * 0.28, -r * 0.18, -r * 0.32, 2);
+  wLine(r * 0.15, -r * 0.32, r * 0.4, -r * 0.28, 2);
+  markerDot(-r * 0.3, -r * 0.1, 2.6 * S, PURPLE);
+  markerDot(r * 0.28, -r * 0.1, 2.6 * S, PURPLE);
+  wPoly([[-r * 0.1, r * 0.1], [0.08 * r, 0.06 * r], [0, r * 0.22]], true); // snout
+  pen(PURPLE, 2.6);
+  wOval(0, r * 0.52, r * 0.34, r * 0.22, 10);              // mouth
+  wOval(0, r * 0.52, r * 0.18, r * 0.1, 8);                // mouth scribble
+  /* small legs with W feet */
+  pen(PURPLE, 2.6);
+  [[-r * 0.55, r * 0.8], [r * 0.3, r * 0.8]].forEach(p => {
+    wPoly([[p[0], p[1]], [p[0], p[1] + 16 * S], [p[0] + 12 * S, p[1] + 16 * S], [p[0] + 12 * S, p[1]]], false);
+    const fy = p[1] + 16 * S;
+    wPoly([[p[0], fy], [p[0] + 3 * S, fy + 6 * S], [p[0] + 6 * S, fy], [p[0] + 9 * S, fy + 6 * S], [p[0] + 12 * S, fy]], false);
+  });
+  ctx.restore();
+}
+
+/* ====================== DRAW: GIRAFFE + GIRL ====================== */
+function drawGiraffe() {
+  const g = groundY(), x0 = giraffeX();
+  const jumpPx = player.y * S;
+  const bob = (state === 'play' && player.y <= 0.01) ? Math.sin(tNow * 11) * 2.5 * S : 0;
+  const wob = player.wobble > 0 ? Math.sin(player.wobble * 16) * 0.06 * player.wobble : 0;
+  /* squash a touch on jump rise, stretch on fall — subtle */
+  ctx.save();
+  ctx.translate(x0 + 75 * S, g - jumpPx + bob);
+  ctx.rotate(wob);
+  ctx.translate(-(x0 + 75 * S), -(g - jumpPx + bob));
+  const base = g - jumpPx + bob;                            // feet line
+
+  const legH = 46 * S, bodyH = 52 * S, bodyL = 150 * S, neckW = 32 * S, neckH = 118 * S;
+  const bodyTop = base - legH - bodyH;
+  const neckTop = bodyTop - neckH;
+  const nx = x0;                                            // neck left edge
+
+  /* --- yellow halo behind the head (like the drawing) --- */
+  ctx.globalAlpha = 0.5;
+  ctx.fillStyle = YELLOW;
+  ctx.beginPath();
+  ctx.arc(nx + neckW * 0.6, neckTop - 12 * S, 26 * S, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  /* --- body outline: neck up, head, body, tapering tail --- */
+  pen(ORANGE, 3.2);
+  /* neck (two lines) */
+  wLine(nx, bodyTop, nx, neckTop, 6);
+  wLine(nx + neckW, bodyTop - 4 * S, nx + neckW, neckTop + 2 * S, 6);
+  /* head: small circle + beak-ish snout pointing left */
+  wOval(nx + neckW * 0.45, neckTop - 10 * S, 19 * S, 15 * S, 12);
+  wPoly([[nx - 14 * S, neckTop - 12 * S], [nx + 2 * S, neckTop - 17 * S], [nx + 2 * S, neckTop - 6 * S]], true);
+  markerDot(nx + neckW * 0.45, neckTop - 14 * S, 2.4 * S, '#5a4632');       // eye
+  /* red-and-yellow mane tuft on top of the head */
+  pen(RED, 2.6);
+  for (let i = 0; i < 6; i++) {
+    const a = -2.4 + i * 0.38;
+    const hx = nx + neckW * 0.45 + Math.cos(a) * 17 * S;
+    const hy = neckTop - 12 * S + Math.sin(a) * 16 * S;
+    wLine(hx, hy, hx + Math.cos(a) * 9 * S, hy + Math.sin(a) * 9 * S, 2);
+  }
+  /* short mane hairs down the back of the neck */
+  pen(ORANGE, 2);
+  for (let yy = neckTop + 14 * S; yy < bodyTop - 6 * S; yy += 12 * S) {
+    wLine(nx + neckW, yy, nx + neckW + 8 * S, yy - 5 * S, 1);
+  }
+  /* body: top line, belly line, tail taper */
+  pen(ORANGE, 3.2);
+  wLine(nx + neckW, bodyTop, nx + bodyL, bodyTop, 6);                        // back
+  wPoly([[nx + bodyL, bodyTop], [nx + bodyL + 34 * S, bodyTop + bodyH * 0.7], [nx + bodyL, bodyTop + bodyH]], false); // tail
+  wLine(nx, bodyTop + bodyH, nx + bodyL, bodyTop + bodyH, 6);                // belly
+  /* four sturdy legs */
+  const legXs = [nx + 8 * S, nx + 44 * S, nx + bodyL - 62 * S, nx + bodyL - 26 * S];
+  legXs.forEach((lx, i) => {
+    const lw = 17 * S;
+    wPoly([[lx, bodyTop + bodyH - 2 * S], [lx, base], [lx + lw, base], [lx + lw, bodyTop + bodyH - 2 * S]], false);
+  });
+  /* pink flower-swirl spots everywhere */
+  pen(PINK, 2.2);
+  spiral(nx + neckW * 0.5, neckTop + 26 * S, 7 * S);
+  spiral(nx + neckW * 0.5, neckTop + 58 * S, 7 * S);
+  spiral(nx + neckW * 0.5, neckTop + 92 * S, 7 * S);
+  const sy1 = bodyTop + bodyH * 0.32, sy2 = bodyTop + bodyH * 0.72;
+  for (let i = 0; i < 5; i++) spiral(nx + 22 * S + i * 27 * S, i % 2 ? sy2 : sy1, 7.5 * S);
+  spiral(legXs[0] + 8 * S, base - 18 * S, 5 * S);
+  spiral(legXs[2] + 8 * S, base - 20 * S, 5 * S);
+
+  /* --- the little girl riding on the giraffe's back --- */
+  const gx2 = nx + bodyL * 0.62, gy2 = bodyTop;
+  const bounce = Math.max(-1, Math.min(1, -player.vy / 500));   // pigtails react to jumps
+  pen(ORANGE, 2.8);
+  /* body: small trapezoid sitting on the back */
+  wPoly([[gx2 - 16 * S, gy2], [gx2 - 12 * S, gy2 - 34 * S], [gx2 + 12 * S, gy2 - 34 * S], [gx2 + 16 * S, gy2]], false);
+  /* arms down to the giraffe's back */
+  wLine(gx2 - 13 * S, gy2 - 26 * S, gx2 - 24 * S, gy2 + 2 * S, 3);
+  wLine(gx2 + 13 * S, gy2 - 26 * S, gx2 + 24 * S, gy2 + 2 * S, 3);
+  /* head */
+  const hy = gy2 - 50 * S;
+  wOval(gx2, hy, 16 * S, 15 * S, 12);
+  /* face: dot eyes + big smile */
+  markerDot(gx2 - 6 * S, hy - 3 * S, 2 * S, ORANGE);
+  markerDot(gx2 + 6 * S, hy - 3 * S, 2 * S, ORANGE);
+  pen(ORANGE, 2.4);
+  ctx.beginPath();
+  ctx.arc(gx2, hy + 2 * S, 8 * S, 0.25 * Math.PI, 0.75 * Math.PI);
+  ctx.stroke();
+  /* two bouncy pigtails */
+  const pt = 10 * S * bounce;
+  wLine(gx2 - 10 * S, hy - 11 * S, gx2 - 20 * S, hy - 24 * S - pt, 3);
+  wLine(gx2 + 10 * S, hy - 11 * S, gx2 + 20 * S, hy - 24 * S - pt, 3);
+  markerDot(gx2 - 21 * S, hy - 26 * S - pt, 3.4 * S, ORANGE);
+  markerDot(gx2 + 21 * S, hy - 26 * S - pt, 3.4 * S, ORANGE);
+
+  ctx.restore();
+
+  /* --- friendly "哎呀!" bubble after a soft bump --- */
+  if (bubbleT > 0) {
+    const bx = nx + neckW + 46 * S, by = neckTop - 26 * S;
+    ctx.globalAlpha = Math.min(1, bubbleT * 2);
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(bx, by, 38 * S, 24 * S, 0, 0, Math.PI * 2); ctx.fill();
+    pen(ORANGE, 2.6);
+    wOval(bx, by, 38 * S, 24 * S, 14);
+    ctx.fillStyle = ORANGE;
+    ctx.font = `bold ${20 * S}px 'Comic Sans MS','Chalkboard SE',sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('哎呀!', bx, by + 1 * S);
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* ====================== DRAW: PARTICLES ====================== */
+function drawFlights() {
+  const bp = basketPos();
+  flights.forEach(f => {
+    if (f.t < 0) return;
+    const t = Math.min(1, f.t / f.dur);
+    /* quadratic bezier arc from the tree up into the basket */
+    const cxp = (f.x0 + bp.x) / 2, cyp = Math.min(f.y0, bp.y) - 120 * S;
+    const ix = (1 - t) * (1 - t) * f.x0 + 2 * (1 - t) * t * cxp + t * t * bp.x;
+    const iy = (1 - t) * (1 - t) * f.y0 + 2 * (1 - t) * t * cyp + t * t * bp.y;
+    markerDot(ix, iy, 7 * S, ORANGE, RED);
+  });
+  bounces.forEach(o => {
+    ctx.globalAlpha = Math.min(1, o.life);
+    markerDot(o.x, o.y, 6.5 * S, ORANGE, RED);
+    ctx.globalAlpha = 1;
+  });
+}
+function drawConfetti() {
+  confetti.forEach(p => {
+    ctx.globalAlpha = Math.min(1, p.life);
+    if (p.type === 'star') {
+      pen(p.color, 2.4);
+      scribbleStar(p.x, p.y, 8 * S, p.rot);
+    } else {
+      markerDot(p.x, p.y, 5.5 * S, ORANGE, RED);
+    }
+    ctx.globalAlpha = 1;
+  });
+}
+
+/* ====================== DRAW: UI (pictures only) ====================== */
+function basketPos() {
+  const u = Math.min(S, 1.4);
+  return { x: W / 2 - 66 * u, y: 38 * u };
+}
+function drawBasketUI() {
+  const u = Math.min(S, 1.4);
+  const bp = basketPos();
+  /* the basket: wobbly trapezoid with weave lines */
+  pen(BROWN, 2.8);
+  const bw = 26 * u, bh = 20 * u;
+  wPoly([[bp.x - bw, bp.y - bh * 0.4], [bp.x - bw * 0.7, bp.y + bh * 0.8],
+         [bp.x + bw * 0.7, bp.y + bh * 0.8], [bp.x + bw, bp.y - bh * 0.4]], false);
+  wLine(bp.x - bw, bp.y - bh * 0.4, bp.x + bw, bp.y - bh * 0.4, 3);
+  pen(BROWN, 1.8);
+  wLine(bp.x - bw * 0.85, bp.y + bh * 0.1, bp.x + bw * 0.85, bp.y + bh * 0.1, 3);
+  /* handle */
+  pen(BROWN, 2.4);
+  ctx.beginPath();
+  ctx.arc(bp.x, bp.y - bh * 0.4, bw * 0.62, Math.PI, 0);
+  ctx.stroke();
+  /* progress: a row of orange pictures filling up — no numbers */
+  for (let i = 0; i < MILESTONE; i++) {
+    const ox = bp.x + bw + 24 * u + i * 24 * u, oy = bp.y + 2 * u;
+    if (i < basketFill) {
+      const pop = (i === basketFill - 1) ? 1 + 0.15 * Math.max(0, Math.sin(tNow * 8)) : 1;
+      markerDot(ox, oy, 8.5 * u * pop, ORANGE, RED);
+    } else {
+      pen('#e5c9a8', 2); wOval(ox, oy, 8.5 * u, 8.5 * u, 9);
+    }
+  }
+}
+function drawMuteIcon() {
+  const u = Math.min(S, 1.4);
+  const mx = W - 44 * u, my = 40 * u;
+  pen(BLUE, 2.6);
+  /* speaker box + cone */
+  wPoly([[mx - 16 * u, my - 6 * u], [mx - 8 * u, my - 6 * u], [mx + 2 * u, my - 14 * u],
+         [mx + 2 * u, my + 14 * u], [mx - 8 * u, my + 6 * u], [mx - 16 * u, my + 6 * u]], true);
+  if (muted) {
+    pen(RED, 3);
+    wLine(mx + 7 * u, my - 9 * u, mx + 20 * u, my + 9 * u, 2);
+    wLine(mx + 20 * u, my - 9 * u, mx + 7 * u, my + 9 * u, 2);
+  } else {
+    ctx.beginPath(); ctx.arc(mx + 6 * u, my, 8 * u, -0.9, 0.9); ctx.stroke();
+    ctx.beginPath(); ctx.arc(mx + 6 * u, my, 14 * u, -0.9, 0.9); ctx.stroke();
+  }
+}
+function drawStartScreen() {
+  /* playful hand-drawn title (decorative only) */
+  const u = Math.min(S, 1.6);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.save();
+  ctx.translate(W / 2, H * 0.24);
+  ctx.rotate(-0.03 + Math.sin(tNow * 1.5) * 0.012);
+  ctx.font = `bold ${42 * u}px 'Comic Sans MS','Chalkboard SE','Marker Felt',cursive`;
+  ctx.lineWidth = 6 * u; ctx.strokeStyle = '#fff';
+  ctx.strokeText('Giraffe Jump!', 0, 0);
+  ctx.fillStyle = ORANGE;
+  ctx.fillText('Giraffe Jump!', 0, 0);
+  ctx.font = `bold ${30 * u}px 'Comic Sans MS','Chalkboard SE','Marker Felt',cursive`;
+  ctx.strokeText('长颈鹿跳跳', 0, 46 * u);
+  ctx.fillStyle = GREEN;
+  ctx.fillText('长颈鹿跳跳', 0, 46 * u);
+  ctx.restore();
+
+  /* one giant pulsing ▶ button — icon only */
+  const pulse = 1 + 0.07 * Math.sin(tNow * 3.2);
+  const r = 54 * u * pulse, cx = W / 2, cy = H * 0.48;
+  ctx.globalAlpha = 0.92;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  pen(ORANGE, 4);
+  wOval(cx, cy, r, r, 16);
+  ctx.fillStyle = GREEN;
+  ctx.beginPath();
+  ctx.moveTo(cx - r * 0.28 + j(), cy - r * 0.42 + j());
+  ctx.lineTo(cx - r * 0.28 + j(), cy + r * 0.42 + j());
+  ctx.lineTo(cx + r * 0.5 + j(), cy + j());
+  ctx.closePath(); ctx.fill();
+}
+
+/* ====================== MAIN LOOP ====================== */
+let lastT = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - lastT) / 1000);   // delta-time, capped
+  lastT = now;
+  update(dt);
+
+  jIdx = 0;                                          // reset jitter cursor
+  ctx.fillStyle = PAPER;
+  ctx.fillRect(0, 0, W, H);
+
+  drawSun();
+  clouds.forEach(drawCloud);
+  birds.forEach(drawBird);
+  drawGround();
+  trees.forEach(drawTree);
+  drawPig();
+  drawGiraffe();
+  drawFlights();
+  drawConfetti();
+
+  if (state === 'play') {
+    drawBasketUI();
+    drawMuteIcon();
+  } else {
+    drawStartScreen();
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
