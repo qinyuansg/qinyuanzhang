@@ -1,3 +1,10 @@
+# This repo
+
+- **🏠 HomeHero** (`index.html` / `HomeHero.html`) — daily-task app for house helpers, documented below.
+- **☀️ Sun Fly!** (`SunFly.html`) — a toddler flying game based on a child's sun drawing. One self-contained file: open it in any browser (best on a phone/tablet). Drag anywhere to fly the smiling sun from the meadow, through clouds and balloons, up into space — collecting stars, meeting friends, and celebrating milestones along the way. No losing, no reading required, made for ages 3+.
+
+---
+
 # 🏠 HomeHero — Daily Tasks for House Helpers
 
 A simple, warm, mobile-first web app that helps a house helper know **what to do today**, tick tasks as done, and explain (in one tap) when something cannot be done — while giving the household full transparency on progress.
