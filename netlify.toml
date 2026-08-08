@@ -1,0 +1,13 @@
+# Netlify configuration — serves the Giraffe Jump! game as the site.
+# No build step: the game is a single self-contained static file.
+#
+# To serve the whole repo instead (HomeHero at /, game at /giraffe-jump/),
+# change publish to "." below.
+
+[build]
+  publish = "giraffe-jump"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
