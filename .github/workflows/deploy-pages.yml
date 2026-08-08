@@ -7,15 +7,29 @@ on:
 
 permissions:
   contents: write
+  pages: write
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Publish the game folder to the gh-pages branch; on public repos
-      # GitHub Pages serves that branch automatically.
+      # Publish the game folder to the gh-pages branch.
       - uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./giraffe-jump
+      # Enable Pages in classic branch-serving mode (idempotent: 409 if
+      # already enabled). Legacy builds don't go through the protected
+      # github-pages Actions environment, so any branch can feed them.
+      - name: Enable GitHub Pages from gh-pages branch
+        run: |
+          curl -sS -o /tmp/pages.json -w "create: %{http_code}\n" -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/pages \
+            -d '{"build_type":"legacy","source":{"branch":"gh-pages","path":"/"}}' || true
+          curl -sS -w "\nstatus: %{http_code}\n" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/pages
