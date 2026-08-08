@@ -30,6 +30,8 @@
    GIRAFFE JUMP! 长颈鹿跳跳
    A one-touch endless runner for a 3-year-old, drawn in
    "living marker" style based on her own drawing.
+   The giraffe's head faces LEFT, so the whole world runs
+   right-to-left: trees arrive from the left edge.
    ============================================================ */
 
 /* ====================== TUNING CONSTANTS ====================== */
@@ -45,21 +47,36 @@ const JUMP_V        = 800;    // initial jump velocity (base px / s)
 const JUMP_BUFFER_MS= 200;    // early-tap forgiveness window
 const TREE_GAP_SEC  = 2.9;    // min seconds of travel between trees
 const TREE_GAP_VAR  = 1.6;    // extra random seconds between trees
-const MILESTONE     = 5;      // trees per big celebration
+const MILESTONE     = 5;      // basket oranges per big celebration
 const BOIL_FPS      = 8;      // hand-drawn "boiling line" rate
 const BOIL_AMP      = 1.3;    // boiling jitter amplitude (px)
 const HITBOX_FRAC   = 0.55;   // fraction of trunk height that "hits"
+
+/* --- new mechanics (adapted from the snowboard prompt) --- */
+const AIR_ORANGE_CHANCE = 0.45; // chance a tree gap holds glowing air-oranges
+const AIR_ORANGE_H_MIN  = 235;  // air-orange height band above ground
+const AIR_ORANGE_H_MAX  = 265;  //   (base units — reachable only mid-jump)
+const SPRING_CHANCE     = 0.30; // chance a tree gap holds a spring flower
+const SUPER_JUMP_MULT   = 1.18; // spring-flower "kicker" launch multiplier
+const PARALLAX_CLOUD    = 0.22; // clouds scroll at this fraction of speed
+const PARALLAX_HILL     = 0.12; // distant hills / village layer fraction
+const LAND_DUST_MIN     = 260;  // min landing impact (base px/s) for spray
+const WIND_MIN_SPEED    = 175;  // base speed where wind streaks appear
+const RUN_DUST_EVERY    = 0.22; // seconds between little running puffs
 
 /* marker palette (from the drawing) */
 const PAPER  = '#fdfdf8';
 const BLUE   = '#3ab5d6';
 const GREEN  = '#3a9e3f';
+const HILLGRN= '#a5d49b';
 const BROWN  = '#b06f3d';
+const DUST   = '#d9c3a5';
 const ORANGE = '#f29f2e';
 const YELLOW = '#f7ce3e';
 const PINK   = '#e2569b';
 const PURPLE = '#bb42c9';
 const RED    = '#e0532f';
+const WIND   = '#c4e6f0';
 
 /* ====================== CANVAS / RESIZE ====================== */
 const cv = document.getElementById('c');
@@ -79,7 +96,7 @@ window.addEventListener('orientationchange', () => setTimeout(resize, 200));
 resize();
 
 const groundY = () => H * 0.82;          // the brown horizon line
-const giraffeX = () => W * 0.20;          // giraffe left edge (fixed)
+const giraffeX = () => W * 0.44;          // giraffe left edge (head side)
 
 /* ====================== BOILING-LINE JITTER ====================== */
 /* Deterministic pseudo-random offsets that change BOIL_FPS times a
@@ -149,7 +166,7 @@ function spiral(cx, cy, rmax) {
   }
   ctx.stroke();
 }
-/* little star / asterisk scribble (birds, confetti) */
+/* little star / asterisk scribble (birds, confetti, sparkles) */
 function scribbleStar(cx, cy, r, rot) {
   ctx.beginPath();
   for (let k = 0; k < 3; k++) {
@@ -229,10 +246,14 @@ function sweep(type, f0, f1, dur, vol) {
   o.start(t); o.stop(t + dur + 0.05);
 }
 const sfxJump    = () => sweep('triangle', 240, 620, 0.24, 0.7);          // rising boing
+const sfxSpring  = () => sweep('triangle', 220, 980, 0.34, 0.8);          // kicker super-boing
 const sfxBonk    = () => sweep('triangle', 150, 65, 0.28, 0.8);           // friendly bonk
+const sfxLand    = () => sweep('sine', 130, 62, 0.12, 0.45);              // soft landing thump
 const sfxPlop    = () => sweep('sine', 620, 170, 0.1, 0.5);               // orange plop
 function sfxChime() { if (!ac) return; const t = ac.currentTime;
   note(midi(88), t, 0.3, 0.8); note(midi(91), t + 0.1, 0.4, 0.8); }       // clear-a-tree
+function sfxSparkle() { if (!ac) return; const t = ac.currentTime;
+  note(midi(96), t, 0.16, 0.5); note(midi(100), t + 0.07, 0.2, 0.45); }   // air-orange twinkle
 function sfxFanfare() { if (!ac) return; const t = ac.currentTime;
   [72, 76, 79, 84].forEach((m, i) => note(midi(m), t + i * 0.12, 0.3, 0.9));
   note(midi(88), t + 0.48, 0.7, 1); note(midi(84), t + 0.48, 0.7, 0.6); } // milestone
@@ -243,14 +264,16 @@ function toggleMute() {
 
 /* ====================== GAME STATE ====================== */
 let state = 'start';            // 'start' | 'play'
-let player = { y: 0, vy: 0, wobble: 0 };  // y = height above ground (base px * S applied later)
+let player = { y: 0, vy: 0, wobble: 0 };  // y = height above ground (base px, * S when drawn)
 let trees = [], clouds = [], birds = [], flights = [], bounces = [], confetti = [];
+let airOranges = [], springs = [], dusts = [], sparkles = [], winds = [], houses = [];
 let cleared = 0, basketFill = 0;
 let treeGap = 0;                // px until next tree spawn
 let lastTap = -9999;            // for the jump buffer
 let bubbleT = 0;                // "哎呀!" bubble timer
 let pig = { hop: 0, dance: 0, blink: 0 };
 let sunSpin = 0, celebrate = 0, pendingCelebrate = 0, birdTimer = 3;
+let hillOff = 0, windT = 0, runDustT = 0, houseT = 4;
 let tNow = 0;
 
 function initClouds() {
@@ -266,6 +289,7 @@ function speed() {
   return Math.min(SPEED_MAX, SPEED_START + cleared * SPEED_PER_TREE) * S;
 }
 
+/* trees enter at the LEFT edge and scroll right, toward the giraffe */
 function spawnTree() {
   const trunkH = 105 + Math.random() * 55;      // base units
   const canopyR = 46 + Math.random() * 14;
@@ -274,19 +298,54 @@ function spawnTree() {
     const a = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * 0.9;
     oranges.push([Math.cos(a) * rr, Math.sin(a) * rr * 0.8 - 0.15]);
   }
-  trees.push({ x: W + 120 * S, trunkH, canopyR, oranges,
+  trees.push({ x: -120 * S, trunkH, canopyR, oranges,
                seed: Math.random() * 10, counted: false, bumped: false, wobble: 0 });
 }
-
+/* glowing collectible oranges floating at jump height, mid-gap */
+function spawnAirOranges(x) {
+  const n = 2 + (Math.random() < 0.5 ? 1 : 0);
+  for (let i = 0; i < n; i++) {
+    airOranges.push({ x: x + (i - (n - 1) / 2) * 36 * S,
+                      h: AIR_ORANGE_H_MIN + Math.random() * (AIR_ORANGE_H_MAX - AIR_ORANGE_H_MIN),
+                      ph: Math.random() * 7 });
+  }
+}
+/* spring flower "kicker": running over it launches a super jump */
+function spawnSpring(x) {
+  springs.push({ x, used: false, sq: 0 });
+}
+function spawnHouse() {
+  houses.push({ p: -140 * S - hillOff, size: 0.8 + Math.random() * 0.5 });
+}
 function spawnBird(loop) {
-  birds.push({ x: W + 30, y: (0.08 + Math.random() * 0.2) * H,
+  birds.push({ x: -30, y: (0.08 + Math.random() * 0.2) * H,
                vx: (60 + Math.random() * 50) * S, ph: Math.random() * 7, loop: !!loop, lt: 0 });
+}
+
+function addSparkles(x, y, n, big) {
+  for (let i = 0; i < n; i++) {
+    sparkles.push({ x: x + (Math.random() - 0.5) * 30 * S, y: y + (Math.random() - 0.5) * 30 * S,
+                    vx: (Math.random() - 0.5) * 90 * S, vy: -(20 + Math.random() * 90) * S,
+                    rot: Math.random() * 7, life: 0.5 + Math.random() * 0.5,
+                    r: (big ? 9 : 6) * S,
+                    color: [YELLOW, PINK, ORANGE][i % 3] });
+  }
+}
+/* white-brown puffs — the marker version of snow spray */
+function addDust(x, y, n, big) {
+  for (let i = 0; i < n && dusts.length < 50; i++) {
+    dusts.push({ x: x + (Math.random() - 0.5) * 40 * S, y: y - Math.random() * 8 * S,
+                 vx: (Math.random() - 0.2) * 110 * S, vy: -(15 + Math.random() * 60) * S,
+                 r: (big ? 5 + Math.random() * 6 : 3 + Math.random() * 3) * S,
+                 life: 0.45 + Math.random() * 0.4 });
+  }
 }
 
 function jump() {
   if (player.y <= 0.01) {
     player.vy = JUMP_V;
     player.y = 0.02;
+    addDust(giraffeX() + 70 * S, groundY(), 3, false);   // takeoff puff
     sfxJump();
   }
 }
@@ -316,18 +375,22 @@ function update(dt) {
   tNow += dt;
   const g = groundY(), gx = giraffeX();
 
-  /* ---- clouds drift on a slow parallax layer, even on start screen ---- */
+  /* ---- parallax layers drift rightward (the giraffe runs LEFT) ---- */
   const spd = state === 'play' ? speed() : 30 * S;
   clouds.forEach(c => {
-    c.x -= spd * 0.22 * dt;
-    if (c.x < -c.r * 3 * S) { c.x = W + c.r * 3 * S; c.y = (0.06 + Math.random() * 0.16) * H; }
+    c.x += spd * PARALLAX_CLOUD * dt;
+    if (c.x > W + c.r * 3 * S) { c.x = -c.r * 3 * S; c.y = (0.06 + Math.random() * 0.16) * H; }
   });
+  hillOff += spd * PARALLAX_HILL * dt;
+  houseT -= dt;
+  if (houseT <= 0) { spawnHouse(); houseT = 9 + Math.random() * 9; }
+  houses = houses.filter(h => h.p + hillOff < W + 160 * S);
 
   /* ---- birds flutter by occasionally ---- */
   birdTimer -= dt;
   if (birdTimer <= 0) { spawnBird(); birdTimer = 4 + Math.random() * 6; }
-  birds.forEach(b => { b.x -= b.vx * dt; b.lt += dt; });
-  birds = birds.filter(b => b.x > -60);
+  birds.forEach(b => { b.x += b.vx * dt; b.lt += dt; });
+  birds = birds.filter(b => b.x < W + 60);
 
   /* ---- timers that tick in every state ---- */
   pig.blink -= dt; if (pig.blink < -3) pig.blink = 0.14;
@@ -346,27 +409,44 @@ function update(dt) {
     player.vy -= GRAVITY * floaty * dt;
     player.y += player.vy * dt;
     if (player.y <= 0) {
+      const impact = -player.vy;                 // landing speed (base px/s)
       player.y = 0; player.vy = 0;
+      if (impact > LAND_DUST_MIN) {              // bigger drop = bigger spray
+        addDust(gx + 40 * S, g, Math.min(10, 3 + impact / 180), impact > 600);
+        sfxLand();
+      }
       if (performance.now() - lastTap < JUMP_BUFFER_MS) jump(); // buffered tap
     }
   }
 
-  /* ---- world scroll + tree spawning ---- */
+  /* ---- little dust puffs trail off the running feet ---- */
+  runDustT -= dt;
+  if (player.y <= 0.01 && runDustT <= 0) {
+    addDust(gx + 120 * S + Math.random() * 40 * S, g, 1, false);
+    runDustT = RUN_DUST_EVERY;
+  }
+
+  /* ---- world scroll + spawning (everything moves +x, to the right) ---- */
   const dx = speed() * dt;
   treeGap -= dx;
   if (treeGap <= 0) {
     spawnTree();
     treeGap = speed() * (TREE_GAP_SEC + Math.random() * TREE_GAP_VAR);
+    /* sprinkle a pickup into the middle of the fresh gap */
+    const midX = -120 * S - treeGap * 0.55;
+    const roll = Math.random();
+    if (roll < AIR_ORANGE_CHANCE) spawnAirOranges(midX);
+    else if (roll < AIR_ORANGE_CHANCE + SPRING_CHANCE) spawnSpring(midX);
   }
 
   trees.forEach(tr => {
-    tr.x -= dx;
+    tr.x += dx;
     tr.wobble = Math.max(0, tr.wobble - dt);
 
     /* very forgiving collision: narrow trunk, must be quite low to bump */
     const trunkTop = tr.trunkH * S * HITBOX_FRAC;
     if (!tr.bumped && !tr.counted &&
-        tr.x > gx + 45 * S && tr.x < gx + 115 * S &&
+        tr.x > gx + 20 * S && tr.x < gx + 115 * S &&
         player.y * S < trunkTop) {
       /* soft bump: NO game over, just comedy */
       tr.bumped = true;
@@ -382,8 +462,8 @@ function update(dt) {
       }
     }
 
-    /* passed the giraffe → cleared! (unless it was bumped) */
-    if (!tr.counted && tr.x < gx - 20 * S) {
+    /* passed behind the giraffe → cleared! (unless it was bumped) */
+    if (!tr.counted && tr.x > gx + 190 * S) {
       tr.counted = true;
       if (!tr.bumped) {
         cleared++;
@@ -393,20 +473,51 @@ function update(dt) {
           flights.push({ x0: tr.x, y0: g - (tr.trunkH + tr.canopyR * 0.5) * S,
                          t: -i * 0.12, dur: 0.85, counter: i === 0 });
         }
-        if (cleared % MILESTONE === 0) pendingCelebrate = 0.95;
       }
     }
   });
-  trees = trees.filter(tr => tr.x > -150 * S);
+  trees = trees.filter(tr => tr.x < W + 160 * S);
 
-  /* ---- flying oranges (tree → basket) ---- */
-  const bp = basketPos();
+  /* ---- glowing air-oranges: collect them mid-jump ---- */
+  const bodyCx = gx + 75 * S, bodyCy = g - player.y * S - 135 * S;
+  airOranges.forEach(o => {
+    o.x += dx;
+    const oy = g - o.h * S + Math.sin(tNow * 3 + o.ph) * 7 * S;
+    if (!o.got && Math.hypot(o.x - bodyCx, oy - bodyCy) < 85 * S) {
+      o.got = true;
+      addSparkles(o.x, oy, 6, true);
+      sfxSparkle();
+      flights.push({ x0: o.x, y0: oy, t: 0, dur: 0.7, counter: true });
+    }
+  });
+  airOranges = airOranges.filter(o => !o.got && o.x < W + 40 * S);
+
+  /* ---- spring flowers: run over one and BOING, a super jump ---- */
+  springs.forEach(sp => {
+    sp.x += dx;
+    sp.sq = Math.max(0, sp.sq - dt);
+    if (!sp.used && player.y <= 0.01 && sp.x > gx + 20 * S && sp.x < gx + 120 * S) {
+      sp.used = true; sp.sq = 0.5;
+      player.vy = JUMP_V * SUPER_JUMP_MULT;
+      player.y = 0.02;
+      addSparkles(sp.x, g - 20 * S, 8, true);
+      sfxSpring();
+    }
+  });
+  springs = springs.filter(sp => sp.x < W + 40 * S);
+
+  /* ---- flying oranges (world → basket) fill the picture row ---- */
   flights.forEach(f => {
     f.t += dt;
     if (f.t >= f.dur && !f.done) {
       f.done = true;
       sfxPlop();
-      if (f.counter) basketFill = Math.min(MILESTONE, basketFill + 1);
+      if (f.counter) {
+        basketFill = Math.min(MILESTONE, basketFill + 1);
+        if (basketFill >= MILESTONE && celebrate <= 0 && pendingCelebrate <= 0) {
+          pendingCelebrate = 0.6;                // full basket → party!
+        }
+      }
     }
   });
   flights = flights.filter(f => !f.done);
@@ -419,6 +530,26 @@ function update(dt) {
     o.life -= dt;
   });
   bounces = bounces.filter(o => o.life > 0);
+
+  /* ---- particles ---- */
+  dusts.forEach(d => {
+    d.x += d.vx * dt + dx * 0.5; d.y += d.vy * dt;
+    d.vy += 60 * S * dt; d.life -= dt;
+  });
+  dusts = dusts.filter(d => d.life > 0);
+  sparkles.forEach(sp => {
+    sp.x += sp.vx * dt; sp.y += sp.vy * dt; sp.rot += dt * 5; sp.life -= dt;
+  });
+  sparkles = sparkles.filter(sp => sp.life > 0);
+
+  /* ---- wind streaks appear as the run gets faster ---- */
+  windT -= dt;
+  if (speed() / S > WIND_MIN_SPEED && windT <= 0) {
+    winds.push({ x: -80, y: (0.25 + Math.random() * 0.45) * H, len: (50 + Math.random() * 70) * S });
+    windT = 0.35;
+  }
+  winds.forEach(wn => { wn.x += speed() * 1.8 * dt; });
+  winds = winds.filter(wn => wn.x < W + 200);
 
   /* ---- milestone celebration ---- */
   if (pendingCelebrate > 0) {
@@ -435,7 +566,7 @@ function update(dt) {
 
 function startCelebration() {
   celebrate = 3.0;
-  pig.dance = 3.0;
+  pig.dance = 3.0;                               // pig dances & dashes over
   basketFill = 0;                                // basket empties, ready to refill
   sfxFanfare();
   for (let i = 0; i < 3; i++) spawnBird(true);   // birds do a fly-by loop
@@ -479,6 +610,34 @@ function drawCloud(c) {
   ctx.closePath();
   ctx.stroke();
 }
+/* distant rolling hills + a tiny village, on the slow parallax layer */
+function ridgeY(x) {
+  const p = (x - hillOff) / S;   // pattern coordinate in base units
+  return groundY() - S * (30 + 20 * Math.sin(p / 150) + 11 * Math.sin(p / 63));
+}
+function drawHills() {
+  pen(HILLGRN, 2.6);
+  const step = Math.max(22, W / 40);
+  ctx.beginPath();
+  for (let x = -10; x <= W + step; x += step) {
+    const y = ridgeY(x) + j();
+    x <= -10 + step / 2 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  houses.forEach(h => {
+    const hx = h.p + hillOff;
+    if (hx < -100 * S || hx > W + 100 * S) return;
+    const hy = ridgeY(hx);
+    const u = 22 * S * h.size;
+    pen(BROWN, 2.2);
+    wPoly([[hx - u, hy], [hx - u, hy - u], [hx + u, hy - u], [hx + u, hy]], false);   // walls
+    wLine(hx - u * 0.25, hy, hx - u * 0.25, hy - u * 0.5, 2);                          // door
+    wLine(hx + u * 0.25, hy, hx + u * 0.25, hy - u * 0.5, 2);
+    wLine(hx - u * 0.25, hy - u * 0.5, hx + u * 0.25, hy - u * 0.5, 2);
+    pen(RED, 2.4);
+    wPoly([[hx - u * 1.2, hy - u], [hx, hy - u * 1.9], [hx + u * 1.2, hy - u]], false); // roof
+  });
+}
 function drawBird(b) {
   pen(GREEN, 2.4);
   const flap = Math.sin(b.lt * 10 + b.ph) * 0.5;
@@ -490,6 +649,12 @@ function drawGround() {
   pen(BROWN, 3.2);
   const g = groundY();
   wLine(-10, g, W + 10, g, Math.max(6, Math.round(W / 90)));
+}
+function drawWinds() {
+  winds.forEach(wn => {
+    pen(WIND, 2.2);
+    wLine(wn.x, wn.y, wn.x + wn.len, wn.y, 3);
+  });
 }
 
 /* ====================== DRAW: TREE ====================== */
@@ -533,10 +698,44 @@ function drawTree(tr) {
   ctx.restore();
 }
 
+/* ====================== DRAW: PICKUPS ====================== */
+function drawAirOrange(o) {
+  const oy = groundY() - o.h * S + Math.sin(tNow * 3 + o.ph) * 7 * S;
+  ctx.globalAlpha = 0.3 + 0.12 * Math.sin(tNow * 4 + o.ph);   // soft glow
+  ctx.fillStyle = YELLOW;
+  ctx.beginPath(); ctx.arc(o.x, oy, 14 * S, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  markerDot(o.x, oy, 7.5 * S, ORANGE, RED);
+  pen(GREEN, 2); wLine(o.x + 2 * S, oy - 8 * S, o.x + 7 * S, oy - 13 * S, 2);  // little leaf
+}
+function drawSpring(sp) {
+  const g = groundY();
+  const squish = sp.sq > 0 ? 1 - 0.5 * Math.sin(sp.sq * Math.PI * 2) : 1;
+  ctx.save();
+  ctx.translate(sp.x, g);
+  ctx.scale(1, squish);
+  pen(GREEN, 2.6);
+  wLine(0, 0, 0, -24 * S, 3);                                  // stem
+  wLine(0, -12 * S, 8 * S, -18 * S, 2);                        // leaf
+  for (let k = 0; k < 5; k++) {                                // pink petals
+    const a = -Math.PI / 2 + k * Math.PI * 2 / 5;
+    markerDot(Math.cos(a) * 9 * S, -30 * S + Math.sin(a) * 9 * S, 5 * S, PINK);
+  }
+  markerDot(0, -30 * S, 4.5 * S, YELLOW, ORANGE);              // flower heart
+  ctx.restore();
+}
+
 /* ====================== DRAW: PIG (the cheerleader) ====================== */
 function drawPig() {
   const g = groundY();
-  const px = Math.max(50 * S, W * 0.07);
+  const homeX = Math.min(W - 45 * S, W * 0.93);
+  /* during a celebration the pig dashes over toward the giraffe and back */
+  let px = homeX;
+  if (pig.dance > 0) {
+    const chaseX = giraffeX() + 215 * S;
+    const prog = (3 - pig.dance) / 3;
+    px = homeX + (chaseX - homeX) * Math.sin(Math.PI * Math.min(1, prog));
+  }
   const hop = pig.hop > 0 ? Math.abs(Math.sin(pig.hop * Math.PI * 2.8)) * 26 * S : 0;
   const dance = pig.dance > 0 ? Math.sin(tNow * 10) * 0.14 : 0;
   const r = 32 * S;
@@ -574,7 +773,6 @@ function drawGiraffe() {
   const jumpPx = player.y * S;
   const bob = (state === 'play' && player.y <= 0.01) ? Math.sin(tNow * 11) * 2.5 * S : 0;
   const wob = player.wobble > 0 ? Math.sin(player.wobble * 16) * 0.06 * player.wobble : 0;
-  /* squash a touch on jump rise, stretch on fall — subtle */
   ctx.save();
   ctx.translate(x0 + 75 * S, g - jumpPx + bob);
   ctx.rotate(wob);
@@ -584,7 +782,7 @@ function drawGiraffe() {
   const legH = 46 * S, bodyH = 52 * S, bodyL = 150 * S, neckW = 32 * S, neckH = 118 * S;
   const bodyTop = base - legH - bodyH;
   const neckTop = bodyTop - neckH;
-  const nx = x0;                                            // neck left edge
+  const nx = x0;                                            // neck left edge (head faces left)
 
   /* --- yellow halo behind the head (like the drawing) --- */
   ctx.globalAlpha = 0.5;
@@ -623,7 +821,7 @@ function drawGiraffe() {
   wLine(nx, bodyTop + bodyH, nx + bodyL, bodyTop + bodyH, 6);                // belly
   /* four sturdy legs */
   const legXs = [nx + 8 * S, nx + 44 * S, nx + bodyL - 62 * S, nx + bodyL - 26 * S];
-  legXs.forEach((lx, i) => {
+  legXs.forEach(lx => {
     const lw = 17 * S;
     wPoly([[lx, bodyTop + bodyH - 2 * S], [lx, base], [lx + lw, base], [lx + lw, bodyTop + bodyH - 2 * S]], false);
   });
@@ -667,7 +865,7 @@ function drawGiraffe() {
 
   /* --- friendly "哎呀!" bubble after a soft bump --- */
   if (bubbleT > 0) {
-    const bx = nx + neckW + 46 * S, by = neckTop - 26 * S;
+    const bx = nx - 44 * S, by = neckTop - 32 * S;
     ctx.globalAlpha = Math.min(1, bubbleT * 2);
     ctx.fillStyle = '#fff';
     ctx.beginPath(); ctx.ellipse(bx, by, 38 * S, 24 * S, 0, 0, Math.PI * 2); ctx.fill();
@@ -687,7 +885,7 @@ function drawFlights() {
   flights.forEach(f => {
     if (f.t < 0) return;
     const t = Math.min(1, f.t / f.dur);
-    /* quadratic bezier arc from the tree up into the basket */
+    /* quadratic bezier arc from the world up into the basket */
     const cxp = (f.x0 + bp.x) / 2, cyp = Math.min(f.y0, bp.y) - 120 * S;
     const ix = (1 - t) * (1 - t) * f.x0 + 2 * (1 - t) * t * cxp + t * t * bp.x;
     const iy = (1 - t) * (1 - t) * f.y0 + 2 * (1 - t) * t * cyp + t * t * bp.y;
@@ -696,6 +894,22 @@ function drawFlights() {
   bounces.forEach(o => {
     ctx.globalAlpha = Math.min(1, o.life);
     markerDot(o.x, o.y, 6.5 * S, ORANGE, RED);
+    ctx.globalAlpha = 1;
+  });
+}
+function drawDusts() {
+  dusts.forEach(d => {
+    ctx.globalAlpha = Math.min(0.7, d.life * 1.6);
+    pen(DUST, 2.2);
+    wOval(d.x, d.y, d.r, d.r * 0.8, 8);
+    ctx.globalAlpha = 1;
+  });
+}
+function drawSparkles() {
+  sparkles.forEach(sp => {
+    ctx.globalAlpha = Math.min(1, sp.life * 2.5);
+    pen(sp.color, 2.2);
+    scribbleStar(sp.x, sp.y, sp.r, sp.rot);
     ctx.globalAlpha = 1;
   });
 }
@@ -765,7 +979,7 @@ function drawStartScreen() {
   const u = Math.min(S, 1.6);
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.save();
-  ctx.translate(W / 2, H * 0.24);
+  ctx.translate(W / 2, H * 0.22);
   ctx.rotate(-0.03 + Math.sin(tNow * 1.5) * 0.012);
   ctx.font = `bold ${42 * u}px 'Comic Sans MS','Chalkboard SE','Marker Felt',cursive`;
   ctx.lineWidth = 6 * u; ctx.strokeStyle = '#fff';
@@ -778,9 +992,9 @@ function drawStartScreen() {
   ctx.fillText('长颈鹿跳跳', 0, 46 * u);
   ctx.restore();
 
-  /* one giant pulsing ▶ button — icon only */
+  /* one giant pulsing ▶ button — icon only, on the open left side */
   const pulse = 1 + 0.07 * Math.sin(tNow * 3.2);
-  const r = 54 * u * pulse, cx = W / 2, cy = H * 0.48;
+  const r = 54 * u * pulse, cx = W * 0.22, cy = H * 0.48;
   ctx.globalAlpha = 0.92;
   ctx.fillStyle = '#fff';
   ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
@@ -808,13 +1022,19 @@ function frame(now) {
 
   drawSun();
   clouds.forEach(drawCloud);
+  drawHills();
   birds.forEach(drawBird);
   drawGround();
   trees.forEach(drawTree);
+  springs.forEach(drawSpring);
+  airOranges.forEach(drawAirOrange);
   drawPig();
   drawGiraffe();
+  drawDusts();
   drawFlights();
+  drawSparkles();
   drawConfetti();
+  drawWinds();
 
   if (state === 'play') {
     drawBasketUI();
